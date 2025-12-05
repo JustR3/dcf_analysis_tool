@@ -37,9 +37,28 @@ This tool automates the DCF valuation process by:
 
 ## Usage
 
-Run the tool:
+### Basic Usage (Interactive Mode)
+
+Run the tool with interactive prompts:
 ```bash
-python app.py
+python app.py MSFT
+```
+
+### Coming Soon: Advanced Usage
+
+Non-interactive mode with CLI arguments (v1.1.0):
+```bash
+# With custom parameters
+python app.py MSFT --growth 8 --terminal-growth 2.5 --wacc 10 --years 5
+
+# With scenario analysis
+python app.py MSFT --scenarios
+
+# Multi-stock comparison
+python app.py AAPL MSFT GOOGL --compare
+
+# Export results to CSV
+python app.py MSFT --output results.csv
 ```
 
 ### Interactive Prompts
@@ -178,28 +197,51 @@ The tool implements automatic rate limiting to respect Yahoo Finance API limits:
 - **Behavior**: Automatically delays requests if limit approaching
 - **No API key required**: Uses free yfinance tier
 
-## Extending the Tool
+## Roadmap & Future Enhancements
 
-### Future Enhancements
+### v1.1.0 (In Progress)
 
-1. **Scenario Analysis** (Bull/Base/Bear cases)
-   ```python
-   scenarios = {
-       'bull': {'growth': 8, 'wacc': 8},
-       'base': {'growth': 5, 'wacc': 10},
-       'bear': {'growth': 2, 'wacc': 12}
-   }
-   ```
+#### ✨ CLI Arguments Support
+- Non-interactive mode for batch analysis
+- Custom parameter specification
+- Ticker as command-line argument instead of prompt
+- Example: `python app.py MSFT --growth 8 --wacc 10`
 
-2. **Sensitivity Analysis** - Show how value changes with different assumptions
+#### 📊 Scenario Analysis (Bull/Base/Bear)
+- Run DCF with three market scenarios simultaneously
+- Bull case: Optimistic growth and lower WACC
+- Base case: Analyst consensus estimates
+- Bear case: Conservative growth and higher WACC
+- Compare valuations across scenarios
+- Example: `python app.py MSFT --scenarios`
 
-3. **Multiple Stock Comparison** - Analyze and rank multiple stocks
+#### 📤 CSV Export
+- Save valuation results to spreadsheet
+- Includes year-by-year projections and summary metrics
+- Useful for portfolio tracking and reporting
+- Example: `python app.py MSFT --output results.csv`
 
-4. **Export Results** - Save to CSV or PDF with charts
+#### 🔀 Multi-Stock Comparison
+- Analyze 5+ stocks in single run
+- Side-by-side valuation comparison
+- Rank by upside/downside percentage
+- Batch processing with results aggregation
+- Example: `python app.py AAPL MSFT GOOGL TSLA --compare`
 
-5. **Debt Adjustments** - Include net debt for enterprise-to-equity conversion
+### v1.2.0 (Planned)
 
-6. **WACC Calculator** - More sophisticated cost of equity and debt calculation
+#### 📈 Sensitivity Analysis
+- Show how valuation changes with input variations
+- Sensitivity tables for key assumptions
+- Identify most impactful variables
+- Visualization of sensitivity ranges
+
+#### 🛠️ Advanced Features
+- **Unit Tests** - Full test coverage for calculations and data fetching
+- **Logging System** - Comprehensive logging for debugging
+- **Configuration File** - YAML/JSON for default parameters
+- **Debt Adjustments** - Include net debt for enterprise-to-equity conversion
+- **WACC Calculator** - More sophisticated cost of equity and debt calculation
 
 ## Common Issues
 
