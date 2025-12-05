@@ -44,21 +44,24 @@ Run the tool with interactive prompts:
 python app.py MSFT
 ```
 
-### Coming Soon: Advanced Usage
+### Advanced Usage (v1.1.0 - Now Available)
 
-Non-interactive mode with CLI arguments (v1.1.0):
+Non-interactive mode with CLI arguments:
 ```bash
 # With custom parameters
 python app.py MSFT --growth 8 --terminal-growth 2.5 --wacc 10 --years 5
 
-# With scenario analysis
+# With scenario analysis (Bull/Base/Bear)
 python app.py MSFT --scenarios
 
-# Multi-stock comparison
-python app.py AAPL MSFT GOOGL --compare
+# Multi-stock comparison (ranked by upside/downside)
+python app.py AAPL MSFT GOOGL NVDA --compare
 
-# Export results to CSV
-python app.py MSFT --output results.csv
+# Export comparison results to CSV
+python app.py AAPL MSFT GOOGL --compare --export results.csv
+
+# Combine: 5-stock analysis with custom parameters and export
+python app.py AAPL MSFT GOOGL NVDA AMZN --compare --growth 8 --wacc 11 --export portfolio.csv
 ```
 
 ### Interactive Prompts
@@ -147,6 +150,46 @@ MARKET COMPARISON:
 ==================================================
 ```
 
+## Multi-Stock Comparison Feature
+
+Compare valuations across multiple stocks in a single ranked table:
+
+```bash
+python app.py AAPL MSFT GOOGL NVDA --compare --growth 8 --wacc 11
+```
+
+Output example:
+```
+================================================================
+MULTI-STOCK COMPARISON ANALYSIS
+================================================================
+
+Analysis Parameters:
+  Growth Rate: 8.0%
+  WACC: 11.0%
+  Terminal Growth: 2.5%
+  Forecast Period: 5 years
+
+Rank  Ticker   Current      Fair Value   Upside/Down     Assessment     
+1     GOOGL    $321.27      $254.35              -20.8% 🔴 Overvalued   
+2     MSFT     $483.16      $208.88              -56.8% 🔴 Overvalued   
+3     AAPL     $278.78      $108.44              -61.1% 🔴 Overvalued   
+4     NVDA     $182.41      $55.04               -69.8% 🔴 Overvalued   
+
+Best: GOOGL (-20.8%)
+Worst: NVDA (-69.8%)
+Average: -52.1%
+```
+
+### CSV Export
+
+Automatically save comparison results:
+```bash
+python app.py AAPL MSFT GOOGL --compare --export results.csv
+```
+
+CSV format includes: Rank, Ticker, Current Price, Fair Value, Upside/Downside %, Market Cap, Beta, Assessment
+
 ## How It Works
 
 ### DCF Formula
@@ -156,12 +199,12 @@ MARKET COMPARISON:
 Where:
 
 - **PV(Explicit FCF)** = Sum of discounted cash flows for forecast period
-  - FCF<sub>t</sub> = FCF<sub>0</sub> × (1 + growth)<sup>t</sup>
-  - PV = FCF<sub>t</sub> / (1 + WACC)<sup>t</sup>
+  - FCFt = FCF0 × (1 + growth)^t
+  - PV = FCFt / (1 + WACC)^t
 
 - **Terminal Value** = Gordon Growth Model
-  - TV = FCF<sub>final</sub> × (1 + terminal_growth) / (WACC - terminal_growth)
-  - PV(TV) = TV / (1 + WACC)<sup>years</sup>
+  - TV = FCFfinal × (1 + terminal_growth) / (WACC - terminal_growth)
+  - PV(TV) = TV / (1 + WACC)^years
 
 - **Value per Share** = Equity Value / Shares Outstanding
 
@@ -199,34 +242,31 @@ The tool implements automatic rate limiting to respect Yahoo Finance API limits:
 
 ## Roadmap & Future Enhancements
 
-### v1.1.0 (In Progress)
+### v1.1.0 (Current Release)
 
-#### ✨ CLI Arguments Support
+#### ✅ COMPLETED: CLI Arguments Support
 - Non-interactive mode for batch analysis
 - Custom parameter specification
-- Ticker as command-line argument instead of prompt
-- Example: `python app.py MSFT --growth 8 --wacc 10`
+- Multiple tickers accepted
+- Status: **Live**
 
-#### 📊 Scenario Analysis (Bull/Base/Bear)
+#### ✅ COMPLETED: Scenario Analysis (Bull/Base/Bear)
 - Run DCF with three market scenarios simultaneously
-- Bull case: Optimistic growth and lower WACC
-- Base case: Analyst consensus estimates
-- Bear case: Conservative growth and higher WACC
 - Compare valuations across scenarios
-- Example: `python app.py MSFT --scenarios`
+- Status: **Live**
 
-#### 📤 CSV Export
+#### ✅ COMPLETED: CSV Export
 - Save valuation results to spreadsheet
-- Includes year-by-year projections and summary metrics
-- Useful for portfolio tracking and reporting
-- Example: `python app.py MSFT --output results.csv`
+- Includes all comparison metrics
+- Useful for portfolio tracking
+- Status: **Live**
 
-#### 🔀 Multi-Stock Comparison
+#### ✅ COMPLETED: Multi-Stock Comparison
 - Analyze 5+ stocks in single run
-- Side-by-side valuation comparison
+- Side-by-side ranked comparison
 - Rank by upside/downside percentage
-- Batch processing with results aggregation
-- Example: `python app.py AAPL MSFT GOOGL TSLA --compare`
+- Batch processing with aggregation
+- Status: **Live**
 
 ### v1.2.0 (Planned)
 
@@ -234,14 +274,13 @@ The tool implements automatic rate limiting to respect Yahoo Finance API limits:
 - Show how valuation changes with input variations
 - Sensitivity tables for key assumptions
 - Identify most impactful variables
-- Visualization of sensitivity ranges
 
 #### 🛠️ Advanced Features
-- **Unit Tests** - Full test coverage for calculations and data fetching
+- **Unit Tests** - Full test coverage for calculations
 - **Logging System** - Comprehensive logging for debugging
 - **Configuration File** - YAML/JSON for default parameters
 - **Debt Adjustments** - Include net debt for enterprise-to-equity conversion
-- **WACC Calculator** - More sophisticated cost of equity and debt calculation
+- **Advanced WACC Calculator** - More sophisticated calculations
 
 ## Common Issues
 
@@ -280,7 +319,7 @@ Measure of stock volatility relative to market. > 1 = more volatile, < 1 = less 
 
 ## Resources
 
-- [Yahoo Finance API Documentation](https://finance.yahoo.com/)
+- [Yahoo Finance API](https://finance.yahoo.com/)
 - [DCF Valuation Methodology](https://www.investopedia.com/terms/d/dcf.asp)
 - [WACC Explanation](https://www.investopedia.com/terms/w/wacc.asp)
 
