@@ -224,6 +224,136 @@ def calculate_dcf(
     }
 
 
+def run_scenario_analysis(company_data: Dict, base_inputs: Dict) -> Optional[Dict]:
+    """
+    Run DCF analysis with three scenarios: Bull, Base, and Bear.
+
+    Args:
+        company_data: Fetched company financial data
+        base_inputs: Base case inputs from user
+
+    Returns:
+        Dictionary with results for all three scenarios
+    """
+    # Define scenario parameters
+    # Bull case: Higher growth, lower WACC (more optimistic)
+    bull_growth = base_inputs["growth"] * 1.5 if base_inputs["growth"] > 0 else 0.08
+    bull_wacc = base_inputs["wacc"] * 0.9  # 10% lower WACC
+
+    # Base case: User inputs
+    base_growth = base_inputs["growth"]
+    base_wacc = base_inputs["wacc"]
+
+    # Bear case: Lower growth, higher WACC (more pessimistic)
+    bear_growth = base_inputs["growth"] * 0.5 if base_inputs["growth"] > 0 else 0.02
+    bear_wacc = base_inputs["wacc"] * 1.15  # 15% higher WACC
+
+    scenarios = {
+        "Bull": {
+            "growth": bull_growth,
+            "term_growth": base_inputs["term_growth"],
+            "wacc": bull_wacc,
+            "years": base_inputs["years"],
+        },
+        "Base": {
+            "growth": base_growth,
+            "term_growth": base_inputs["term_growth"],
+            "wacc": base_wacc,
+            "years": base_inputs["years"],
+        },
+        "Bear": {
+            "growth": bear_growth,
+            "term_growth": base_inputs["term_growth"],
+            "wacc": bear_wacc,
+            "years": base_inputs["years"],
+        },
+    }
+
+    results = {}
+    for scenario_name, params in scenarios.items():
+        try:
+            dcf_result = calculate_dcf(
+                fcf0=company_data["fcf"],
+                growth=params["growth"],
+                term_growth=params["term_growth"],
+                wacc=params["wacc"],
+                years=params["years"],
+            )
+            shares = company_data["shares"]
+            value_per_share = dcf_result["enterprise_value"] / shares if shares > 0 else 0
+            current_price = company_data["current_price"]
+            upside_downside = (
+                ((value_per_share - current_price) / current_price * 100)
+                if current_price > 0
+                else 0
+            )
+
+            results[scenario_name] = {
+                "growth": params["growth"],
+                "wacc": params["wacc"],
+                "enterprise_value": dcf_result["enterprise_value"],
+                "value_per_share": value_per_share,
+                "upside_downside": upside_downside,
+            }
+        except ValueError as e:
+            print(f"Error in {scenario_name} scenario: {e}")
+            return None
+
+    return results
+
+
+def display_scenario_results(company_data: Dict, scenario_results: Dict):
+    """
+    Display scenario analysis results in a comparison table.
+
+    Args:
+        company_data: Fetched company data
+        scenario_results: Results from run_scenario_analysis
+    """
+    ticker = company_data["ticker"]
+    current_price = company_data["current_price"]
+
+    print(f"\n{'=' * 80}")
+    print(f"SCENARIO ANALYSIS - {ticker}")
+    print(f"{'=' * 80}\n")
+
+    print(f"Current Market Price: ${current_price:.2f}\n")
+
+    # Header
+    print(f"{'Scenario':<12} {'Growth':<10} {'WACC':<10} {'Fair Value':<15} {'Upside/Down':<15} {'Assessment':<15}")
+    print("-" * 80)
+
+    # Results for each scenario
+    for scenario_name in ["Bull", "Base", "Bear"]:
+        if scenario_name not in scenario_results:
+            continue
+
+        result = scenario_results[scenario_name]
+        growth_pct = result["growth"] * 100
+        wacc_pct = result["wacc"] * 100
+        value_per_share = result["value_per_share"]
+        upside_downside = result["upside_downside"]
+
+        if upside_downside > 20:
+            sentiment = "🟢 Undervalued"
+        elif upside_downside < -20:
+            sentiment = "🔴 Overvalued"
+        else:
+            sentiment = "🟡 Fair Value"
+
+        print(
+            f"{scenario_name:<12} {growth_pct:>8.1f}% {wacc_pct:>8.1f}% ${value_per_share:>13.2f} {upside_downside:>13.1f}% {sentiment:<15}"
+        )
+
+    print(f"\n{'=' * 80}\n")
+
+    # Summary statistics
+    values = [scenario_results[s]["value_per_share"] for s in ["Bull", "Base", "Bear"]]
+    print(f"Valuation Range: ${min(values):.2f} - ${max(values):.2f}")
+    print(f"Base Case Fair Value: ${scenario_results['Base']['value_per_share']:.2f}")
+    print(f"Average Fair Value: ${sum(values) / len(values):.2f}\n")
+
+
 def display_results(company_data: Dict, dcf_results: Dict):
     """
     Display DCF analysis results with formatting.
@@ -336,6 +466,12 @@ def parse_arguments():
         help="Forecast horizon in years. Default: 5",
     )
 
+    parser.add_argument(
+        "--scenarios",
+        action="store_true",
+        help="Run scenario analysis (Bull/Base/Bear cases)",
+    )
+
     return parser.parse_args()
 
 
@@ -398,19 +534,28 @@ def main():
 
     # Calculate DCF
     try:
-        dcf_results = calculate_dcf(
-            fcf0=company_data["fcf"],
-            growth=inputs["growth"],
-            term_growth=inputs["term_growth"],
-            wacc=inputs["wacc"],
-            years=inputs["years"],
-        )
+        if args.scenarios:
+            # Scenario analysis mode
+            scenario_results = run_scenario_analysis(company_data, inputs)
+            if scenario_results:
+                display_scenario_results(company_data, scenario_results)
+            else:
+                print("Error running scenario analysis.")
+                sys.exit(1)
+        else:
+            # Standard DCF analysis
+            dcf_results = calculate_dcf(
+                fcf0=company_data["fcf"],
+                growth=inputs["growth"],
+                term_growth=inputs["term_growth"],
+                wacc=inputs["wacc"],
+                years=inputs["years"],
+            )
+            # Display results
+            display_results(company_data, dcf_results)
     except ValueError as e:
         print(f"Error in DCF calculation: {e}")
         sys.exit(1)
-
-    # Display results
-    display_results(company_data, dcf_results)
 
 
 if __name__ == "__main__":
