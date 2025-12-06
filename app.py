@@ -355,6 +355,181 @@ def display_scenario_results(company_data: Dict, scenario_results: Dict):
     print(f"Average Fair Value: ${sum(values) / len(values):.2f}\n")
 
 
+
+def run_sensitivity_analysis(company_data: Dict, base_inputs: Dict) -> Dict:
+    """Run sensitivity analysis showing how valuation changes with key assumptions."""
+    fcf = company_data["fcf"]
+    shares = company_data["shares"]
+    current_price = company_data["current_price"]
+    years = base_inputs["years"]
+    
+    base_growth = base_inputs["growth"]
+    base_wacc = base_inputs["wacc"]
+    base_term_growth = base_inputs["term_growth"]
+    
+    # Define sensitivity ranges
+    growth_range = [x * 0.01 for x in range(2, 16, 1)]  # 2% to 15%
+    wacc_range = [x * 0.001 for x in range(80, 160, 5)]  # 8% to 16%
+    term_growth_range = [x * 0.001 for x in range(5, 35, 2)]  # 0.5% to 3.5%
+    
+    results = {
+        "growth_sensitivity": {},
+        "wacc_sensitivity": {},
+        "term_growth_sensitivity": {},
+        "matrix_growth_wacc": {},
+    }
+    
+    # Growth sensitivity (keep WACC and term_growth constant)
+    for g in growth_range:
+        try:
+            dcf = calculate_dcf(fcf, g, base_term_growth, base_wacc, years)
+            value_per_share = dcf["enterprise_value"] / shares if shares > 0 else 0
+            results["growth_sensitivity"][g * 100] = value_per_share
+        except ValueError:
+            continue
+    
+    # WACC sensitivity (keep growth and term_growth constant)
+    for w in wacc_range:
+        try:
+            dcf = calculate_dcf(fcf, base_growth, base_term_growth, w, years)
+            value_per_share = dcf["enterprise_value"] / shares if shares > 0 else 0
+            results["wacc_sensitivity"][w * 100] = value_per_share
+        except ValueError:
+            continue
+    
+    # Terminal growth sensitivity (keep growth and WACC constant)
+    for t in term_growth_range:
+        try:
+            dcf = calculate_dcf(fcf, base_growth, t, base_wacc, years)
+            value_per_share = dcf["enterprise_value"] / shares if shares > 0 else 0
+            results["term_growth_sensitivity"][t * 100] = value_per_share
+        except ValueError:
+            continue
+    
+    # Growth vs WACC matrix (2D sensitivity)
+    for g in [x * 0.01 for x in range(4, 13, 2)]:  # 4%, 6%, 8%, 10%, 12%
+        results["matrix_growth_wacc"][g * 100] = {}
+        for w in [x * 0.001 for x in range(90, 140, 5)]:  # 9%, 9.5%, ..., 13.5%
+            try:
+                dcf = calculate_dcf(fcf, g, base_term_growth, w, years)
+                value_per_share = dcf["enterprise_value"] / shares if shares > 0 else 0
+                results["matrix_growth_wacc"][g * 100][w * 100] = value_per_share
+            except ValueError:
+                results["matrix_growth_wacc"][g * 100][w * 100] = None
+    
+    return results
+
+
+def display_sensitivity_analysis(company_data: Dict, sensitivity_results: Dict, base_inputs: Dict):
+    """Display sensitivity analysis with formatted tables."""
+    ticker = company_data["ticker"]
+    current_price = company_data["current_price"]
+    base_growth = base_inputs["growth"] * 100
+    base_wacc = base_inputs["wacc"] * 100
+    base_term_growth = base_inputs["term_growth"] * 100
+    
+    print(f"\n{'=' * 100}")
+    print(f"SENSITIVITY ANALYSIS - {ticker}")
+    print(f"{'=' * 100}\n")
+    
+    # Growth sensitivity table
+    print("1. FAIR VALUE SENSITIVITY TO GROWTH RATE (WACC constant at {:.1f}%):".format(base_wacc))
+    print("-" * 70)
+    print(f"{'Growth':<12} {'Fair Value':<20} {'vs Current':<20} {'Assessment':<15}")
+    print("-" * 70)
+    
+    for growth_pct in sorted(sensitivity_results["growth_sensitivity"].keys()):
+        value = sensitivity_results["growth_sensitivity"][growth_pct]
+        vs_current = ((value - current_price) / current_price * 100) if current_price > 0 else 0
+        marker = " *" if abs(growth_pct - base_growth) < 0.5 else ""
+        
+        if vs_current > 20:
+            assessment = "🟢 Undervalued"
+        elif vs_current < -20:
+            assessment = "🔴 Overvalued"
+        else:
+            assessment = "🟡 Fair"
+        
+        print(f"{growth_pct:>6.1f}%{marker:<5} ${value:>17.2f} {vs_current:>18.1f}% {assessment:<15}")
+    
+    print()
+    
+    # WACC sensitivity table
+    print("2. FAIR VALUE SENSITIVITY TO WACC (Growth constant at {:.1f}%):".format(base_growth))
+    print("-" * 70)
+    print(f"{'WACC':<12} {'Fair Value':<20} {'vs Current':<20} {'Assessment':<15}")
+    print("-" * 70)
+    
+    for wacc_pct in sorted(sensitivity_results["wacc_sensitivity"].keys()):
+        value = sensitivity_results["wacc_sensitivity"][wacc_pct]
+        vs_current = ((value - current_price) / current_price * 100) if current_price > 0 else 0
+        marker = " *" if abs(wacc_pct - base_wacc) < 0.3 else ""
+        
+        if vs_current > 20:
+            assessment = "🟢 Undervalued"
+        elif vs_current < -20:
+            assessment = "�� Overvalued"
+        else:
+            assessment = "🟡 Fair"
+        
+        print(f"{wacc_pct:>6.1f}%{marker:<5} ${value:>17.2f} {vs_current:>18.1f}% {assessment:<15}")
+    
+    print()
+    
+    # Terminal growth sensitivity table
+    print("3. FAIR VALUE SENSITIVITY TO TERMINAL GROWTH:")
+    print("-" * 70)
+    print(f"{'Term Growth':<12} {'Fair Value':<20} {'vs Current':<20} {'Assessment':<15}")
+    print("-" * 70)
+    
+    for term_pct in sorted(sensitivity_results["term_growth_sensitivity"].keys()):
+        value = sensitivity_results["term_growth_sensitivity"][term_pct]
+        vs_current = ((value - current_price) / current_price * 100) if current_price > 0 else 0
+        marker = " *" if abs(term_pct - base_term_growth) < 0.2 else ""
+        
+        if vs_current > 20:
+            assessment = "🟢 Undervalued"
+        elif vs_current < -20:
+            assessment = "🔴 Overvalued"
+        else:
+            assessment = "🟡 Fair"
+        
+        print(f"{term_pct:>6.1f}%{marker:<5} ${value:>17.2f} {vs_current:>18.1f}% {assessment:<15}")
+    
+    print()
+    
+    # 2D matrix: Growth vs WACC
+    print("4. 2D SENSITIVITY MATRIX - Fair Value (Growth vs WACC):")
+    print("-" * 100)
+    
+    matrix = sensitivity_results["matrix_growth_wacc"]
+    growth_vals = sorted(matrix.keys())
+    wacc_vals = sorted(matrix[growth_vals[0]].keys()) if growth_vals else []
+    
+    # Header
+    print(f"{'Growth / WACC':<15}", end="")
+    for w in wacc_vals:
+        print(f"{w:>10.1f}%", end="")
+    print()
+    print("-" * (15 + len(wacc_vals) * 11))
+    
+    # Rows
+    for g in growth_vals:
+        print(f"{g:>6.1f}%{' '*8}", end="")
+        for w in wacc_vals:
+            val = matrix[g][w]
+            if val is not None:
+                print(f"${val:>9.0f}", end="")
+            else:
+                print(f"{'N/A':>10}", end="")
+        print()
+    
+    print(f"\n{'=' * 100}\n")
+    print(f"Note: Current Market Price = ${current_price:.2f}")
+    print(f"Base Case (marked with *): Growth {base_growth:.1f}%, WACC {base_wacc:.1f}%, Terminal Growth {base_term_growth:.1f}%\n")
+
+
+
 def run_multi_stock_comparison(tickers: list, base_inputs: Dict) -> Optional[Dict]:
     """Run DCF for multiple stocks and compile comparison data."""
     results = {}
@@ -586,6 +761,12 @@ def parse_arguments():
     )
 
     parser.add_argument(
+        "--sensitivity",
+        action="store_true",
+        help="Run sensitivity analysis showing impact of assumption changes",
+    )
+
+    parser.add_argument(
         "--export",
         type=str,
         default=None,
@@ -707,6 +888,14 @@ def main():
                 display_scenario_results(company_data, scenario_results)
             else:
                 print("Error running scenario analysis.")
+                sys.exit(1)
+        elif args.sensitivity:
+            # Sensitivity analysis mode
+            sensitivity_results = run_sensitivity_analysis(company_data, inputs)
+            if sensitivity_results:
+                display_sensitivity_analysis(company_data, sensitivity_results, inputs)
+            else:
+                print("Error running sensitivity analysis.")
                 sys.exit(1)
         else:
             # Standard DCF analysis
