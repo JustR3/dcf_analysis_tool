@@ -18,3 +18,7 @@ yfinance_info.ipynb
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
+
+
+# macOS specific files
+.DS_Store
