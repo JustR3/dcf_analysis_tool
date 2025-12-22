@@ -2,11 +2,14 @@
 Portfolio Optimization Module
 ==============================
 
-Coming soon: Portfolio optimization engines including:
-- Mean-Variance Optimization (Markowitz)
-- Risk Parity
-- Black-Litterman Model
-- Fundamental-weighted portfolios using DCF valuations
+Portfolio optimization engines including:
+- Market Regime Detection (200-day SMA crossover)
+- Mean-Variance Optimization (Markowitz) - Coming Soon
+- Risk Parity - Coming Soon
+- Black-Litterman Model - Coming Soon
+- Fundamental-weighted portfolios using DCF valuations - Coming Soon
 """
 
-__all__ = []
+from .regime import RegimeDetector, MarketRegime, RegimeResult
+
+__all__ = ["RegimeDetector", "MarketRegime", "RegimeResult"]
