@@ -1,26 +1,33 @@
 # Quant Portfolio Manager
 
-A modular Python toolkit for quantitative finance analysis, featuring a professional DCF (Discounted Cash Flow) valuation engine with interactive CLI and programmatic API.
+> **A production-ready quantitative finance toolkit combining fundamental analysis with modern portfolio theory.**
 
-## 🎯 Features
+Quant Portfolio Manager seamlessly integrates DCF (Discounted Cash Flow) valuation with Black-Litterman portfolio optimization, enabling data-driven investment decisions backed by fundamental analysis and market equilibrium theory.
 
-### ✅ DCF Valuation Engine (Active)
-- **Real-time financial data** fetching via yfinance
-- **Standard DCF analysis** with customizable parameters
-- **Scenario analysis** (Bull/Base/Bear cases)
-- **Sensitivity analysis** for key assumptions
-- **Multi-stock comparison** with ranking
-- **Interactive CLI** with rich terminal UI
-- **Programmatic API** for integration
+## ✨ Key Features
 
-### ✅ Portfolio Optimization Engine (Active)
-- **Black-Litterman Model** with DCF valuation integration
-- **Mean-Variance Optimization** (Markowitz)
-- **Market Regime Detection** (200-day SMA + VIX term structure)
-- **Multiple optimization methods** (Max Sharpe, Min Volatility, Efficient Risk)
-- **Discrete allocation** for integer share quantities
-- **Interactive CLI** for portfolio creation
-- **Programmatic API** for custom workflows
+### 📊 DCF Valuation Engine
+Professional-grade discounted cash flow analysis with real-time market data:
+- **Automated Fair Value Calculation** - WACC, growth rates, and terminal value
+- **Scenario Analysis** - Bull/Base/Bear cases for risk assessment  
+- **Sensitivity Tables** - Test robustness of assumptions
+- **Multi-Stock Comparison** - Rank opportunities by upside potential
+- **Export Capabilities** - CSV output for further analysis
+
+### 🎯 Portfolio Optimization
+Black-Litterman model with DCF integration for optimal asset allocation:
+- **DCF-Driven Views** - Fundamental valuations inform expected returns
+- **Market Regime Detection** - 200-day SMA + VIX term structure analysis
+- **Multiple Strategies** - Max Sharpe, Min Volatility, Efficient Risk
+- **Discrete Allocation** - Integer shares with leftover cash tracking
+- **Confidence Weighting** - Blend fundamental views with market equilibrium
+
+### 🎨 Modern Interface
+Built for both interactive use and programmatic integration:
+- **Rich Terminal UI** - Beautiful, colorful output with tables and panels
+- **Interactive Prompts** - Guided workflows for complex analyses
+- **Python API** - Full programmatic access for automation
+- **CLI Commands** - Quick one-liners for power users
 
 ## 🚀 Quick Start
 
@@ -31,24 +38,51 @@ A modular Python toolkit for quantitative finance analysis, featuring a professi
 git clone https://github.com/justr3/quant-portfolio-manager.git
 cd quant-portfolio-manager
 
-# Install dependencies (requires uv)
+# Install dependencies with uv (recommended)
 uv sync
+
+# Or with pip
+pip install -r requirements.txt
 ```
 
-### Command-Line Usage
+### 5-Minute Demo
 
 ```bash
-# Interactive mode (guided prompts)
+# 1. Interactive mode - guided prompts walk you through
 uv run main.py
 
-# DCF Valuation
+# 2. Quick DCF valuation
 uv run main.py valuation AAPL
 
-# Portfolio Optimization (interactive)
+# 3. Build an optimized portfolio
 uv run main.py portfolio
+```
 
-# Custom DCF parameters
-uv run main.py valuation AAPL --growth 8 --wacc 11 --years 5
+## 📖 Documentation
+
+### Table of Contents
+- [DCF Valuation](#dcf-valuation)
+  - [Command-Line Interface](#dcf-cli-usage)
+  - [Python API](#dcf-python-api)
+- [Portfolio Optimization](#portfolio-optimization)
+  - [Command-Line Interface](#portfolio-cli-usage)
+  - [Python API](#portfolio-python-api)
+- [Market Regime Detection](#market-regime-detection)
+- [Project Structure](#project-structure)
+- [Dependencies](#dependencies)
+
+---
+
+## 💰 DCF Valuation
+
+### DCF CLI Usage
+
+```bash
+# Basic valuation
+uv run main.py valuation AAPL
+
+# Custom parameters
+uv run main.py valuation TSLA --growth 12 --wacc 10 --years 5
 
 # Scenario analysis (Bull/Base/Bear)
 uv run main.py valuation MSFT --scenarios
@@ -57,73 +91,29 @@ uv run main.py valuation MSFT --scenarios
 uv run main.py valuation GOOGL --sensitivity
 
 # Compare multiple stocks
-uv run main.py valuation AAPL MSFT GOOGL NVDA --compare
-
-# Export comparison results to CSV
-uv run main.py valuation AAPL MSFT GOOGL --compare --export results.csv
+uv run main.py valuation AAPL MSFT GOOGL NVDA --compare --export results.csv
 ```
 
-## 📦 Project Structure
+### DCF Python API
 
-```
-quant-portfolio-manager/
-├── main.py                  # CLI entry point
-├── modules/
-│   ├── __init__.py
-│   ├── valuation/           # DCF Valuation Engine
-│   │   ├── __init__.py
-│   │   └── dcf.py           # DCFEngine class
-│   └── portfolio/           # Portfolio Optimization (coming soon)
-│       └── __init__.py
-├── pyproject.toml           # Project configuration & dependencies
-├── uv.lock                  # Dependency lock file
-├── README.md
-└── LICENSE
-```
+**Basic Usage:**
 
-## 💻 Usage Examples
-
-### DCF Valuation Engine
-
-The DCF module provides both a command-line interface and a Python API.
-
-#### CLI Usage
-
-```bash
-# Basic valuation with automatic parameter detection
-uv run main.py valuation AAPL
-
-# Customize growth assumptions
-uv run main.py valuation TSLA --growth 12 --wacc 10
-
-# Scenario analysis for investment thesis validation
-uv run main.py valuation MSFT --scenarios
-
-# Sensitivity analysis to test assumption robustness
-uv run main.py valuation GOOGL --sensitivity
-
-# Compare multiple stocks to find best value
-uv run main.py valuation AAPL MSFT GOOGL NVDA --compare --export comparison.csv
-```
-
-#### Python API
-
-The refactored engine provides a clean, importable API for integration:
+**Basic Usage:**
 
 ```python
 from modules.valuation import DCFEngine
 
-# Initialize engine (auto-fetches data)
-engine = DCFEngine("AAPL")
-
-# Get intrinsic value with default parameters
+# Quick valuation
+engine = DCFEngine("AAPL", auto_fetch=True)
 result = engine.get_intrinsic_value()
+
 print(f"Fair Value: ${result['value_per_share']:.2f}")
 print(f"Current Price: ${result['current_price']:.2f}")
 print(f"Upside: {result['upside_downside']:+.1f}%")
 print(f"Assessment: {result['assessment']}")
+```
 
-# Customize DCF assumptions
+**Custom Parameters:**
 result = engine.get_intrinsic_value(
     growth=0.10,        # 10% revenue growth
     wacc=0.12,          # 12% discount rate
@@ -131,7 +121,22 @@ result = engine.get_intrinsic_value(
     years=5             # 5-year forecast horizon
 )
 
-# Run scenario analysis (Bull/Base/Bear)
+**Custom Parameters:**
+
+```python
+# Customize DCF assumptions
+result = engine.get_intrinsic_value(
+    growth=0.10,        # 10% revenue growth
+    wacc=0.12,          # 12% discount rate
+    term_growth=0.025,  # 2.5% terminal growth
+    years=5             # 5-year forecast horizon
+)
+```
+
+**Scenario & Sensitivity Analysis:**
+
+```python
+# Scenario analysis (Bull/Base/Bear)
 scenarios = engine.run_scenario_analysis()
 for scenario in ["Bull", "Base", "Bear"]:
     data = scenarios[scenario]
@@ -139,150 +144,63 @@ for scenario in ["Bull", "Base", "Bear"]:
 
 # Sensitivity analysis
 sensitivity = engine.run_sensitivity_analysis()
-print("Growth Rate Sensitivity:")
-for growth_rate, fair_value in sensitivity["growth_sensitivity"].items():
-    print(f"  {growth_rate:.1f}%: ${fair_value:.2f}")
+```
 
-# Multi-stock comparison
+**Multi-Stock Comparison:**
+
+```python
+# Compare multiple stocks
 comparison = DCFEngine.compare_stocks(["AAPL", "MSFT", "GOOGL", "NVDA"])
-print(f"\nRanked by Upside Potential:")
+
+print("Ranked by Upside Potential:")
 for rank, ticker in enumerate(comparison["ranking"], 1):
     data = comparison["results"][ticker]
     print(f"{rank}. {ticker}: {data['upside_downside']:+.1f}%")
-
-# Export to DataFrame for further analysis
-import pandas as pd
-df = engine.to_dataframe()
-print(df)  # Year-by-year cash flow projections
 ```
 
-#### Advanced Usage: Batch Analysis
+---
 
-```python
-from modules.valuation import DCFEngine
-import pandas as pd
+## 📈 Portfolio Optimization
 
-# Analyze a portfolio of stocks
-tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "META"]
-results = []
+Integrate fundamental analysis with modern portfolio theory using Black-Litterman model.
 
-for ticker in tickers:
-    engine = DCFEngine(ticker)
-    if engine.is_ready:
-        val = engine.get_intrinsic_value()
-        results.append({
-            "Ticker": ticker,
-            "Current": val["current_price"],
-            "Fair Value": val["value_per_share"],
-            "Upside": val["upside_downside"],
-            "Assessment": val["assessment"]
-        })
-
-df = pd.DataFrame(results)
-print(df.sort_values("Upside", ascending=False))
-```
-
-## 🔧 Architecture Improvements
-
-### Major Refactoring (v0.1.0)
-
-The codebase has undergone a significant refactoring to improve modularity and maintainability:
-
-#### Before (Monolithic `app.py`)
-- Single 900+ line file with all functionality
-- CLI-only interface with hard-coded outputs
-- Difficult to import and reuse
-- Tightly coupled data fetching and presentation
-
-#### After (Modular Structure)
-- **Separated concerns**: `DCFEngine` class for calculations, `main.py` for interface
-- **Clean API**: Importable engine with structured return types
-- **Dataclasses**: Type-safe data containers (`CompanyData`, `DCFResult`, `ValuationResult`)
-- **Flexible display**: Support for Rich terminal UI or plain text fallback
-- **Programmatic access**: Full functionality available via Python API
-- **Better testing**: Modular structure enables unit testing
-
-#### Key Improvements
-1. **`modules/valuation/dcf.py`**: Core DCF calculation engine (865 lines)
-   - Data fetching with rate limiting
-   - DCF calculations (explicit forecast + terminal value)
-   - Scenario and sensitivity analysis
-   - Multi-stock comparison
-
-2. **`main.py`**: User-facing CLI (1198 lines)
-   - Interactive menu system
-   - Rich terminal formatting
-   - Argument parsing for direct commands
-   - CSV export functionality
-
-3. **Dependencies**: Enhanced with professional tools
-   - `rich`: Beautiful terminal output
-   - `questionary`: Interactive prompts
-   - `yfinance`: Real-time financial data
-   - `pandas`: Data manipulation
-
-## 📚 Portfolio Optimization Module
-
-The portfolio module provides advanced portfolio optimization with DCF integration.
-
-### Features
-
-1. **Black-Litterman Model with DCF Integration**
-   - Combines market equilibrium with fundamental analysis
-   - DCF valuations become "views" on expected returns
-   - Confidence-weighted blending of market and analyst views
-
-2. **Mean-Variance Optimization**
-   - Maximum Sharpe Ratio portfolios
-   - Minimum Volatility portfolios
-   - Efficient Risk targeting
-
-3. **Market Regime Detection**
-   - 200-day SMA crossover on SPY
-   - VIX term structure analysis
-   - Combined regime assessment
-
-4. **Discrete Allocation**
-   - Integer share quantities
-   - Leftover cash tracking
-   - Ready for real-world implementation
-
-### CLI Usage
+### Portfolio CLI Usage
 
 ```bash
-# Interactive portfolio optimization
+# Interactive workflow
 uv run main.py portfolio
 
-# The workflow:
-# 1. Enter stock tickers (e.g., AAPL,MSFT,GOOGL,NVDA)
-# 2. System runs DCF analysis on all stocks
-# 3. Market regime is detected
-# 4. Black-Litterman optimization combines DCF views with market data
-# 5. Results show optimal weights, metrics, and discrete allocation
+# The system will:
+# 1. Prompt for stock tickers
+# 2. Run DCF analysis on each
+# 3. Detect market regime (RISK_ON/RISK_OFF)
+# 4. Optimize using Black-Litterman with DCF views
+# 5. Display optimal weights and discrete allocation
 ```
 
-### Python API Usage
+### Portfolio Python API
+
+**End-to-End Workflow:**
 
 ```python
 from modules.valuation import DCFEngine
-from modules.portfolio import optimize_portfolio_with_dcf
+from modules.portfolio import optimize_portfolio_with_dcf, OptimizationMethod
 
-# Step 1: Run DCF analysis on multiple stocks
+# Step 1: Run DCF analysis
 tickers = ['AAPL', 'MSFT', 'GOOGL', 'NVDA']
 dcf_results = {}
 
 for ticker in tickers:
     engine = DCFEngine(ticker, auto_fetch=True)
     if engine.is_ready:
-        result = engine.get_intrinsic_value()
-        dcf_results[ticker] = result
+        dcf_results[ticker] = engine.get_intrinsic_value()
 
-# Step 2: Optimize portfolio using Black-Litterman with DCF views
+# Step 2: Optimize portfolio with Black-Litterman
 portfolio = optimize_portfolio_with_dcf(
     dcf_results=dcf_results,
     method=OptimizationMethod.MAX_SHARPE,
     period="2y",
-    confidence=0.3,  # 30% confidence in DCF views
+    confidence=0.3,  # 30% weight to DCF views
 )
 
 print(f"Expected Return: {portfolio.expected_annual_return:.2f}%")
@@ -291,16 +209,18 @@ print(f"Sharpe Ratio: {portfolio.sharpe_ratio:.2f}")
 print(f"Weights: {portfolio.weights}")
 ```
 
-### Advanced Usage
+**Advanced Control:**
+
+**Advanced Control:**
 
 ```python
-from modules.portfolio import PortfolioEngine, RegimeDetector
+from modules.portfolio import PortfolioEngine, OptimizationMethod
 
-# Manual workflow with more control
-engine = PortfolioEngine(tickers=['AAPL', 'MSFT', 'GOOGL'])
+# Manual workflow for maximum flexibility
+engine = PortfolioEngine(tickers=['AAPL', 'MSFT', 'GOOGL', 'NVDA'])
 engine.fetch_data(period='2y')
 
-# Use DCF results as Black-Litterman views
+# Optimize with DCF views
 result = engine.optimize_with_views(
     dcf_results=dcf_results,
     confidence=0.4,  # Higher confidence = more weight to DCF
@@ -309,107 +229,229 @@ result = engine.optimize_with_views(
 
 # Get discrete allocation for $50,000 portfolio
 allocation = engine.get_discrete_allocation(total_portfolio_value=50000)
-print(f"Shares to buy: {allocation.allocation}")
-print(f"Leftover cash: ${allocation.leftover:.2f}")
+print(f"Shares: {allocation.allocation}")
+print(f"Leftover: ${allocation.leftover:.2f}")
+```
 
-# Check market regime
+---
+
+## 🌡️ Market Regime Detection
+
+Automatically detect market conditions using technical and volatility indicators:
+
+```python
+from modules.portfolio import RegimeDetector
+
 detector = RegimeDetector()
-regime = detector.get_current_regime()
-print(f"Market Regime: {regime}")  # RISK_ON or RISK_OFF
+
+# Combined regime (SPY SMA + VIX term structure)
+regime = detector.get_current_regime(method="combined")
+print(f"Market Regime: {regime}")  # RISK_ON, RISK_OFF, or CAUTION
+
+# Get detailed regime information
+result = detector.get_regime_with_details()
+print(f"SPY Price: ${result.current_price:.2f}")
+print(f"200-day SMA: ${result.sma_200:.2f}")
+print(f"VIX Structure: {result.vix_structure.to_dict()}")
 ```
 
-## 📋 CLI Reference
+**Regime Signals:**
+- **RISK_ON**: SPY above 200-day SMA + VIX in contango (normal conditions)
+- **RISK_OFF**: SPY below 200-day SMA + VIX in backwardation (panic)
+- **CAUTION**: Mixed signals or elevated volatility
+
+---
+
+## 📦 Project Structure
 
 ```
-usage: quant-portfolio-manager [-h] {valuation,val,dcf,portfolio,port,opt} ...
-
-Quant Portfolio Manager - DCF Valuation & Portfolio Optimization
-
-Commands:
-  valuation (val, dcf)     DCF Valuation Engine
-  portfolio (port, opt)    Portfolio Optimization Engine
-
-Valuation Options:
-  tickers                  Stock ticker symbol(s)
-  -g, --growth GROWTH      Forecast growth rate (%)
-  -t, --terminal-growth    Terminal growth rate (%) [default: 2.5]
-  -w, --wacc WACC          Discount rate / WACC (%)
-  -y, --years YEARS        Forecast horizon [default: 5]
-  -s, --scenarios          Run Bull/Base/Bear scenario analysis
-  --sensitivity            Run sensitivity analysis
-  -c, --compare            Compare multiple stocks
-  -e, --export FILE        Export results to CSV
-  -h, --help               Show help message
-
-Examples:
-  # Interactive mode with guided prompts
-  uv run main.py
-  
-  # Quick valuation
-  uv run main.py valuation AAPL
-  
-  # Custom parameters
-  uv run main.py valuation AAPL -g 8 -w 11 -y 5
-  
-  # Scenario analysis
-  uv run main.py valuation MSFT --scenarios
-  
-  # Multi-stock comparison with export
-  uv run main.py valuation AAPL MSFT GOOGL -c -e results.csv
+quant-portfolio-manager/
+├── main.py                      # CLI entry point
+├── modules/
+│   ├── __init__.py
+│   ├── valuation/
+│   │   ├── __init__.py
+│   │   └── dcf.py              # DCF valuation engine
+│   └── portfolio/
+│       ├── __init__.py
+│       ├── optimizer.py        # Portfolio optimization
+│       └── regime.py           # Market regime detection
+├── pyproject.toml              # Project configuration
+├── uv.lock                     # Dependency lock
+├── README.md
+├── TODO.md
+└── LICENSE
 ```
 
-## 🛠️ Requirements
+---
 
-- **Python**: 3.12+
-- **Package Manager**: [uv](https://github.com/astral-sh/uv) (recommended) or pip
+## 🛠️ Technical Stack
 
-## 📦 Dependencies
+**Core Technologies:**
+- **Python 3.12+** - Modern Python with type hints
+- **yfinance** - Real-time market data
+- **PyPortfolioOpt** - Portfolio optimization algorithms
+- **NumPy & Pandas** - Numerical computing
+- **Rich** - Terminal UI
+- **Questionary** - Interactive prompts
 
-### Core Dependencies
-- **`yfinance`** (≥0.2.32): Real-time financial data from Yahoo Finance
-- **`pandas`** (≥2.0.0): Data manipulation and analysis
-- **`rich`** (≥13.0.0): Beautiful terminal output and formatting
-- **`questionary`** (≥2.0.0): Interactive command-line prompts
+**Algorithms:**
+- **DCF Valuation** - Explicit forecast + Gordon Growth terminal value
+- **Black-Litterman** - Bayesian posterior with analyst views
+- **Mean-Variance** - Markowitz efficient frontier
+- **Regime Detection** - 200-day SMA + VIX term structure
 
-### Development Dependencies
-- **`pytest`** (≥7.0.0): Testing framework
-- **`pytest-cov`** (≥4.0.0): Code coverage
-- **`ruff`** (≥0.1.0): Fast Python linter and formatter
+---
+
+## 📊 Dependencies
+
+## 📊 Dependencies
+
+**Production:**
+```toml
+yfinance >= 0.2.32        # Market data
+pandas >= 2.0.0           # Data manipulation
+rich >= 13.0.0            # Terminal UI
+questionary >= 2.0.0      # Interactive prompts
+pyportfolioopt >= 1.5.5   # Optimization algorithms
+scipy >= 1.11.0           # Scientific computing
+cvxpy >= 1.4.0            # Convex optimization
+scikit-learn >= 1.3.0     # Machine learning utilities
+```
+
+**Development:**
+```toml
+pytest >= 7.0.0           # Testing
+pytest-cov >= 4.0.0       # Coverage
+ruff >= 0.1.0             # Linting & formatting
+```
+
+---
+
+## 🎯 Use Cases
+
+**1. Value Investing Screen**
+```bash
+# Find undervalued stocks
+uv run main.py valuation AAPL MSFT GOOGL AMZN META --compare -e undervalued.csv
+```
+
+**2. Portfolio Construction**
+```python
+# Build DCF-driven portfolio
+dcf_results = {...}  # Your DCF analysis
+portfolio = optimize_portfolio_with_dcf(dcf_results, confidence=0.3)
+```
+
+**3. Risk Assessment**
+```bash
+# Test valuation sensitivity
+uv run main.py valuation TSLA --sensitivity
+```
+
+**4. Market Timing**
+```python
+# Check regime before deploying capital
+regime = RegimeDetector().get_current_regime()
+if regime == MarketRegime.RISK_ON:
+    # Deploy aggressive strategy
+```
+
+---
 
 ## 🧪 Testing
 
 ```bash
-# Run tests (when test suite is added)
+# Run test suite
 uv run pytest
 
-# Run with coverage
-uv run pytest --cov=modules
+# With coverage report
+uv run pytest --cov=modules --cov-report=html
+
+# Lint code
+uv run ruff check .
 ```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📄 License
-
-MIT License - See [LICENSE](LICENSE) file for details
-
-## 🙏 Acknowledgments
-
-- Financial data provided by [yfinance](https://github.com/ranaroussi/yfinance)
-- Terminal UI powered by [Rich](https://github.com/Textualize/rich)
-- Interactive prompts by [Questionary](https://github.com/tmbo/questionary)
-
-## 📧 Contact
-
-For questions or feedback, please open an issue on GitHub.
 
 ---
 
-**Note**: This tool is for educational and research purposes only. Always conduct your own research and consult with financial professionals before making investment decisions.
+## 🗺️ Roadmap
+
+### ✅ Completed (v0.1.0)
+- [x] DCF valuation engine with scenario/sensitivity analysis
+- [x] Black-Litterman portfolio optimization
+- [x] Market regime detection (SPY SMA + VIX)
+- [x] Interactive CLI with Rich UI
+- [x] Python API for programmatic access
+- [x] Discrete share allocation
+
+### 🔜 Coming Soon (v0.2.0)
+- [ ] Risk Parity allocation
+- [ ] Hierarchical Risk Parity (HRP)
+- [ ] Monte Carlo simulation
+- [ ] Factor models (Fama-French)
+- [ ] Backtesting framework
+- [ ] Tax-loss harvesting
+
+### 💡 Future Ideas
+- [ ] Options pricing (Black-Scholes)
+- [ ] ESG integration
+- [ ] Real-time portfolio tracking
+- [ ] Web dashboard
+- [ ] API service
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! Areas of interest:
+- **Testing**: Unit tests for core modules
+- **Documentation**: Tutorials and examples
+- **Features**: New optimization methods or analysis tools
+- **Performance**: Optimization and caching improvements
+
+**Process:**
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
+
+---
+
+## 📄 License
+
+MIT License - See [LICENSE](LICENSE) for details.
+
+---
+
+## 🙏 Acknowledgments
+
+Built with excellent open-source tools:
+- [yfinance](https://github.com/ranaroussi/yfinance) - Yahoo Finance API
+- [PyPortfolioOpt](https://github.com/robertmartin8/PyPortfolioOpt) - Portfolio optimization
+- [Rich](https://github.com/Textualize/rich) - Terminal formatting
+- [Questionary](https://github.com/tmbo/questionary) - Interactive prompts
+
+---
+
+## ⚠️ Disclaimer
+
+**For educational and research purposes only.**
+
+This tool is not financial advice. Always:
+- Conduct your own research
+- Consult licensed financial professionals
+- Understand the risks before investing
+- Verify all calculations independently
+
+Past performance does not guarantee future results.
+
+---
+
+<div align="center">
+
+**[Documentation](#documentation)** • **[Examples](#dcf-valuation)** • **[Issues](https://github.com/justr3/quant-portfolio-manager/issues)** • **[Discussions](https://github.com/justr3/quant-portfolio-manager/discussions)**
+
+Made with ❤️ for quantitative finance
+
+</div>
