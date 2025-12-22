@@ -1,10 +1,5 @@
-"""
-Valuation Module
-================
+"""Valuation Module."""
 
-Contains engines for stock valuation analysis.
-"""
+from .dcf import DCFEngine, CompanyData
 
-from .dcf import DCFEngine
-
-__all__ = ["DCFEngine"]
+__all__ = ["DCFEngine", "CompanyData"]
