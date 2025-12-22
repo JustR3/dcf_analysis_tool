@@ -1,10 +1,22 @@
 [project]
-name = "dcf"
+name = "quant-portfolio-manager"
 version = "0.1.0"
-description = "Simple DCF tool in Python to analyze US stocks through yfinance"
+description = "Modular quant toolkit: DCF valuation engine + portfolio optimization"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "yfinance>=0.2.32",
     "pandas>=2.0.0",
+    "rich>=13.0.0",
+    "questionary>=2.0.0",
+]
+
+[project.scripts]
+qpm = "main_cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
 ]

@@ -1,24 +1,23 @@
-# Python-generated files
+# Python
 __pycache__/
 *.py[oc]
 build/
 dist/
-wheels/
 *.egg-info
 
 # Virtual environments
-.venv
+.venv/
 
-# Ignore specific files
-portfolio_analysis.csv
-portfolio_final.csv
-results.csv
-yfinance_info.ipynb
+# IDE
+.idea/
+.vscode/
 
-
-# Jupyter Notebook checkpoints
+# Jupyter
 .ipynb_checkpoints/
+*.ipynb
 
-
-# macOS specific files
+# macOS
 .DS_Store
+
+# Output files
+*.csv
