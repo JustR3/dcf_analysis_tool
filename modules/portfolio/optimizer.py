@@ -20,6 +20,8 @@ class OptimizationMethod(Enum):
     MAX_SHARPE = "max_sharpe"
     MIN_VOLATILITY = "min_volatility"
     EFFICIENT_RISK = "efficient_risk"
+    EFFICIENT_RETURN = "efficient_return"
+    MAX_QUADRATIC_UTILITY = "max_quadratic_utility"
     EQUAL_WEIGHT = "equal_weight"
 
 
@@ -142,7 +144,7 @@ class PortfolioEngine:
 
     def optimize(self, method: OptimizationMethod = OptimizationMethod.MAX_SHARPE,
                  target_volatility: Optional[float] = None,
-                 weight_bounds: Tuple[float, float] = (0, 1)) -> Optional[PortfolioMetrics]:
+                 weight_bounds: Tuple[float, float] = (0, 0.3)) -> Optional[PortfolioMetrics]:
         """Optimize portfolio weights."""
         try:
             if self.expected_returns is None and not self.calculate_expected_returns():
@@ -173,6 +175,12 @@ class PortfolioEngine:
                     self._last_error = "target_volatility required"
                     return None
                 ef.efficient_risk(target_volatility=target_volatility)
+            elif method == OptimizationMethod.EFFICIENT_RETURN:
+                target_return = target_volatility if target_volatility else 0.15  # reuse param
+                ef.efficient_return(target_return=target_return)
+            elif method == OptimizationMethod.MAX_QUADRATIC_UTILITY:
+                risk_aversion = target_volatility if target_volatility else 1.0  # reuse param
+                ef.max_quadratic_utility(risk_aversion=risk_aversion)
 
             weights = ef.clean_weights()
             perf = ef.portfolio_performance(verbose=False, risk_free_rate=self.risk_free_rate)

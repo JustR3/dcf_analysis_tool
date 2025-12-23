@@ -66,10 +66,10 @@ def main():
         print(f"  Error: {engine.get_last_error()}")
     
     # Step 4: Discrete Allocation
-    print("\n4. Discrete Allocation ($50,000)")
+    print("\n4. Discrete Allocation ($100,000)")
     print("-" * 60)
     
-    alloc = engine.get_discrete_allocation(50000)
+    alloc = engine.get_discrete_allocation(100000)
     if alloc:
         for ticker, shares in alloc.allocation.items():
             value = shares * dcf_results[ticker]['current_price']

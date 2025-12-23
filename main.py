@@ -351,9 +351,43 @@ def run_portfolio_interactive():
     regime = RegimeDetector().get_current_regime()
     print_msg(f"Regime: {regime}", "success")
     
+    # Select optimization method
+    method_choices = [
+        "1. Max Sharpe (Best risk-adjusted returns)",
+        "2. Min Volatility (Lowest risk)",
+        "3. Efficient Risk (Target volatility level)",
+        "4. Efficient Return (Target return level)",
+        "5. Max Quadratic Utility (Risk aversion based)",
+        "6. Equal Weight (Diversified)"
+    ]
+    
+    if HAS_QUESTIONARY:
+        method_choice = questionary.select(
+            "Optimization objective:",
+            choices=method_choices,
+            style=custom_style
+        ).ask()
+    else:
+        print("\nOptimization Objectives:")
+        print("\n".join(f"  {c}" for c in method_choices))
+        method_choice = input("Choice (1-6) [1]: ").strip() or "1"
+    
+    # Map choice to method
+    method_map = {
+        "1": OptimizationMethod.MAX_SHARPE,
+        "2": OptimizationMethod.MIN_VOLATILITY,
+        "3": OptimizationMethod.EFFICIENT_RISK,
+        "4": OptimizationMethod.EFFICIENT_RETURN,
+        "5": OptimizationMethod.MAX_QUADRATIC_UTILITY,
+        "6": OptimizationMethod.EQUAL_WEIGHT
+    }
+    
+    method_key = next((k for k in method_map if k in method_choice), "1")
+    selected_method = method_map[method_key]
+    
     # Optimize
-    print_msg("Optimizing with Black-Litterman...")
-    result = optimize_portfolio_with_dcf(dcf_results, OptimizationMethod.MAX_SHARPE, "2y", 0.3)
+    print_msg(f"Optimizing with Black-Litterman ({selected_method.value})...")
+    result = optimize_portfolio_with_dcf(dcf_results, selected_method, "2y", 0.3)
     
     if not result:
         print_msg("Optimization failed", "error")
