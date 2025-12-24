@@ -6,6 +6,7 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 import yfinance as yf
 
@@ -39,6 +40,25 @@ class DCFEngine:
 
     RISK_FREE_RATE: float = 0.045
     MARKET_RISK_PREMIUM: float = 0.07
+    
+    # Data quality bounds for growth rates
+    MIN_GROWTH_THRESHOLD: float = -0.50  # -50% (allow real declines)
+    MAX_GROWTH_THRESHOLD: float = 1.00   # 100% (catch data errors)
+    
+    # Sector-specific Bayesian priors for growth rates
+    SECTOR_GROWTH_PRIORS = {
+        "Technology": 0.15,               # 15% - High innovation
+        "Communication Services": 0.12,  # 12% - Digital growth
+        "Healthcare": 0.10,              # 10% - Demographics
+        "Consumer Cyclical": 0.08,       # 8% - Economic cycles
+        "Industrials": 0.06,             # 6% - GDP-linked
+        "Financial Services": 0.07,      # 7% - Credit growth
+        "Consumer Defensive": 0.04,      # 4% - Stable demand
+        "Energy": 0.05,                  # 5% - Commodity-driven
+        "Utilities": 0.03,               # 3% - Regulated
+        "Real Estate": 0.05,             # 5% - Property markets
+        "Basic Materials": 0.05,         # 5% - Commodity cycles
+    }
 
     def __init__(self, ticker: str, auto_fetch: bool = True):
         self.ticker = ticker.upper().strip()
@@ -170,6 +190,44 @@ class DCFEngine:
         if beta is None:
             beta = self._company_data.beta if self._company_data else 1.0
         return self.RISK_FREE_RATE + (beta * self.MARKET_RISK_PREMIUM)
+    
+    def clean_growth_rate(self, analyst_growth: Optional[float], 
+                         sector: Optional[str] = None,
+                         blend_weight: float = 0.7) -> tuple[float, str]:
+        """Clean analyst growth rate using Bayesian prior blending.
+        
+        Args:
+            analyst_growth: Raw growth rate from yfinance
+            sector: Company sector for prior selection
+            blend_weight: Weight for analyst data (0.7 = 70% analyst, 30% prior)
+            
+        Returns:
+            (cleaned_growth, source_message)
+        """
+        # Get sector prior
+        sector_prior = self.SECTOR_GROWTH_PRIORS.get(sector, 0.08)  # Default 8%
+        
+        # Case 1: No analyst data
+        if analyst_growth is None:
+            return sector_prior, f"⚠️  No analyst data. Using sector prior ({sector_prior*100:.1f}%)"
+        
+        # Case 2: Extreme outlier (data error)
+        if analyst_growth < self.MIN_GROWTH_THRESHOLD or analyst_growth > self.MAX_GROWTH_THRESHOLD:
+            return sector_prior, (
+                f"⚠️  Analyst data ({analyst_growth*100:.1f}%) rejected (outlier). "
+                f"Using sector prior ({sector_prior*100:.1f}%)"
+            )
+        
+        # Case 3: Valid but extreme - Bayesian blend
+        if analyst_growth < -0.20 or analyst_growth > 0.50:
+            blended = (blend_weight * analyst_growth) + ((1 - blend_weight) * sector_prior)
+            return blended, (
+                f"ℹ️  Analyst data ({analyst_growth*100:.1f}%) blended with sector prior. "
+                f"Using {blended*100:.1f}%"
+            )
+        
+        # Case 4: Reasonable data - use as is
+        return analyst_growth, f"✓ Using analyst growth rate ({analyst_growth*100:.1f}%)"
     
     def get_sector_average_ev_sales(self, sector: str, max_peers: int = 10) -> Optional[float]:
         """Get average EV/Sales multiple from sector peers."""
@@ -343,7 +401,15 @@ class DCFEngine:
             return self.calculate_ev_sales_valuation()
         
         # Use DCF for profitable companies
-        growth = growth if growth is not None else (data.analyst_growth or 0.05)
+        # Clean growth rate using Bayesian prior if user didn't provide explicit value
+        if growth is None:
+            cleaned_growth, cleaning_msg = self.clean_growth_rate(data.analyst_growth, data.sector)
+            growth = cleaned_growth
+            # Store cleaning message for display
+            growth_cleaning = cleaning_msg
+        else:
+            growth_cleaning = None
+        
         wacc = wacc if wacc is not None else self.calculate_wacc(data.beta)
         
         # Smart default: Use exit multiple for high-growth/tech, Gordon Growth for mature
@@ -382,6 +448,7 @@ class DCFEngine:
             "assessment": assessment,
             "inputs": {"growth": growth, "term_growth": term_growth, "wacc": wacc, 
                       "years": years, "terminal_method": terminal_method},
+            "growth_cleaning": growth_cleaning,  # Include cleaning message if applicable
             "company_data": data.to_dict(),
         }
 
@@ -521,6 +588,128 @@ class DCFEngine:
             "terminal_method": terminal_method,
             "wacc": wacc,
             "status": "success",
+        }
+
+    def simulate_value(self, iterations: int = 5000,
+                      growth: Optional[float] = None,
+                      wacc: Optional[float] = None,
+                      term_growth: float = 0.025,
+                      years: int = 5,
+                      terminal_method: Optional[str] = None,
+                      exit_multiple: Optional[float] = None) -> dict:
+        """Monte Carlo simulation for probabilistic valuation.
+        
+        Simulates multiple DCF scenarios with stochastic inputs to generate
+        a distribution of possible values. Useful for risk assessment.
+        
+        Args:
+            iterations: Number of Monte Carlo runs (default 5000)
+            growth, wacc, term_growth, years: Base case parameters
+            terminal_method: Terminal value method
+            exit_multiple: Exit multiple for terminal value
+            
+        Returns:
+            dict with median, VaR, upside, probability metrics
+        """
+        if not self.is_ready:
+            return {"error": f"No data for {self.ticker}: {self._last_error}"}
+        
+        data = self._company_data
+        
+        # Can only simulate for positive FCF companies
+        if data.fcf <= 0:
+            return {"error": "Monte Carlo requires positive FCF"}
+        
+        # Set base parameters
+        if growth is None:
+            growth = data.analyst_growth or 0.05
+        if wacc is None:
+            wacc = self.calculate_wacc(data.beta)
+        
+        # Determine terminal method
+        if terminal_method is None:
+            high_growth_sectors = {"Technology", "Communication Services", "Healthcare"}
+            terminal_method = "exit_multiple" if data.sector in high_growth_sectors else "gordon_growth"
+        
+        if exit_multiple is None and terminal_method == "exit_multiple":
+            exit_multiple = self.get_sector_exit_multiple(data.sector)
+        
+        # Run Monte Carlo simulations
+        values = []
+        
+        for _ in range(iterations):
+            # Stochastic parameters
+            sim_growth = np.random.normal(loc=growth, scale=0.05)
+            sim_wacc = np.random.normal(loc=wacc, scale=0.01)
+            
+            # Bound growth to reasonable range
+            sim_growth = np.clip(sim_growth, -0.50, 1.00)
+            sim_wacc = max(sim_wacc, 0.01)  # Prevent negative WACC
+            
+            # Stochastic exit multiple if using exit multiple method
+            if terminal_method == "exit_multiple":
+                sim_exit_mult = np.random.uniform(low=exit_multiple*0.8, high=exit_multiple*1.2)
+            else:
+                sim_exit_mult = None
+            
+            try:
+                _, _, _, ev, _ = self.calculate_dcf(
+                    data.fcf, sim_growth, term_growth, sim_wacc, years,
+                    terminal_method, sim_exit_mult
+                )
+                value_per_share = ev / data.shares if data.shares > 0 else 0
+                values.append(value_per_share)
+            except (ValueError, ZeroDivisionError):
+                continue  # Skip failed iterations
+        
+        if not values:
+            return {"error": "All Monte Carlo iterations failed"}
+        
+        # Calculate statistics
+        values = np.array(values)
+        median_value = np.median(values)
+        mean_value = np.mean(values)
+        std_value = np.std(values)
+        
+        # Risk metrics
+        var_95 = np.percentile(values, 5)   # Value at Risk (5th percentile)
+        var_50 = np.percentile(values, 50)  # Median
+        upside_95 = np.percentile(values, 95)  # 95th percentile (upside)
+        
+        # Probability metrics
+        prob_undervalued = (values > data.current_price).mean() * 100
+        prob_overvalued = (values < data.current_price).mean() * 100
+        
+        # Assessment
+        if prob_undervalued > 75:
+            assessment = "HIGH CONVICTION BUY (>75% probability undervalued)"
+        elif prob_undervalued > 60:
+            assessment = "MODERATE BUY (60-75% probability undervalued)"
+        elif prob_undervalued > 40:
+            assessment = "NEUTRAL (40-60% mixed signals)"
+        elif prob_undervalued > 25:
+            assessment = "MODERATE SELL (25-40% probability undervalued)"
+        else:
+            assessment = "HIGH CONVICTION SELL (<25% probability undervalued)"
+        
+        return {
+            "ticker": self.ticker,
+            "iterations": len(values),
+            "current_price": data.current_price,
+            "median_value": median_value,
+            "mean_value": mean_value,
+            "std_value": std_value,
+            "var_95": var_95,  # Downside risk
+            "upside_95": upside_95,  # Upside potential
+            "prob_undervalued": prob_undervalued,
+            "prob_overvalued": prob_overvalued,
+            "assessment": assessment,
+            "base_params": {
+                "growth": growth,
+                "wacc": wacc,
+                "terminal_method": terminal_method,
+            },
+            "distribution": values.tolist() if iterations <= 1000 else None,  # Only save for small runs
         }
 
     def run_scenario_analysis(self, base_growth: Optional[float] = None, 

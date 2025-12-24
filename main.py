@@ -89,6 +89,10 @@ def display_valuation(result: dict, engine=None):
                 cf_table.add_row(str(cf["year"]), f"{cf['fcf']:,.0f}", f"{cf['pv']:,.0f}")
             console.print(cf_table)
             
+            # Show growth cleaning warning if applicable
+            if "growth_cleaning" in result and result["growth_cleaning"]:
+                console.print(f"\n[yellow]{result['growth_cleaning']}[/yellow]")
+            
             inputs = result["inputs"]
             terminal_info = result.get("terminal_info", {})
             
