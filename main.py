@@ -90,11 +90,41 @@ def display_valuation(result: dict):
             console.print(cf_table)
             
             inputs = result["inputs"]
-            console.print(Panel(
-                f"Growth: {inputs['growth']*100:.1f}% | WACC: {inputs['wacc']*100:.1f}% | "
-                f"Terminal: {inputs['term_growth']*100:.1f}% | Years: {inputs['years']}",
-                title="Assumptions", box=box.ROUNDED,
-            ))
+            terminal_info = result.get("terminal_info", {})
+            
+            # Build assumptions string with terminal method info
+            assumptions = (f"Growth: {inputs['growth']*100:.1f}% | WACC: {inputs['wacc']*100:.1f}% | "
+                          f"Years: {inputs['years']}")
+            
+            # Add terminal value method details
+            if terminal_info.get("method") == "exit_multiple":
+                assumptions += f" | Exit Multiple: {terminal_info.get('exit_multiple', 0):.1f}x"
+            else:
+                assumptions += f" | Terminal Growth: {inputs['term_growth']*100:.1f}%"
+            
+            console.print(Panel(assumptions, title="Assumptions", box=box.ROUNDED))
+            
+            # Show terminal value breakdown
+            if terminal_info:
+                term_table = Table(title="Terminal Value", box=box.SIMPLE, show_header=False)
+                term_table.add_column("Item", style="dim")
+                term_table.add_column("Value", justify="right")
+                
+                method_name = "Exit Multiple" if terminal_info.get("method") == "exit_multiple" else "Gordon Growth"
+                term_table.add_row("Method", f"[cyan]{method_name}[/cyan]")
+                term_table.add_row("Terminal Value", f"${terminal_info.get('terminal_value', 0):,.0f}M")
+                term_table.add_row("PV Terminal", f"${terminal_info.get('terminal_pv', 0):,.0f}M")
+                term_table.add_row("PV Explicit FCF", f"${result.get('pv_explicit', 0):,.0f}M")
+                
+                # Show percentage contribution
+                pv_explicit = result.get('pv_explicit', 0)
+                term_pv = terminal_info.get('terminal_pv', 0)
+                total = pv_explicit + term_pv
+                if total > 0:
+                    term_pct = (term_pv / total) * 100
+                    term_table.add_row("Terminal % of Value", f"{term_pct:.1f}%")
+                
+                console.print(term_table)
         elif method == "EV/Sales":
             # Show EV/Sales inputs
             inputs = result["inputs"]

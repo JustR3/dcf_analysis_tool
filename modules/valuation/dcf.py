@@ -110,11 +110,17 @@ class DCFEngine:
             return False
 
     def calculate_dcf(self, fcf0: float, growth: float, term_growth: float, 
-                      wacc: float, years: int) -> tuple[list[dict], float, float, float]:
-        """Calculate DCF metrics. Returns (cash_flows, pv_explicit, term_pv, enterprise_value)."""
-        if wacc <= term_growth:
-            raise ValueError("WACC must be greater than terminal growth rate")
+                      wacc: float, years: int, terminal_method: str = "gordon_growth",
+                      exit_multiple: Optional[float] = None) -> tuple[list[dict], float, float, float, dict]:
+        """Calculate DCF metrics with flexible terminal value methods.
         
+        Args:
+            terminal_method: 'gordon_growth' (perpetuity) or 'exit_multiple' (EV/FCF multiple)
+            exit_multiple: Custom exit multiple (if None, uses sector default)
+        
+        Returns:
+            (cash_flows, pv_explicit, term_pv, enterprise_value, terminal_info)
+        """
         # Validate FCF is positive - DCF doesn't work with negative cash flows
         if fcf0 <= 0:
             raise ValueError(f"Cannot perform DCF with non-positive FCF: ${fcf0:.2f}M. "
@@ -123,16 +129,41 @@ class DCFEngine:
         pv_explicit, fcf = 0.0, fcf0
         cash_flows = []
 
+        # Explicit forecast period
         for t in range(1, years + 1):
             fcf *= 1 + growth
             pv = fcf / ((1 + wacc) ** t)
             pv_explicit += pv
             cash_flows.append({"year": t, "fcf": fcf, "pv": pv})
 
-        term_value = fcf * (1 + term_growth) / (wacc - term_growth)
+        # Terminal value calculation
+        terminal_info = {"method": terminal_method}
+        
+        if terminal_method == "exit_multiple":
+            # Exit Multiple Method: Terminal Value = Terminal FCF × Exit Multiple
+            # More realistic for growth companies - represents acquisition/IPO pricing
+            if exit_multiple is None:
+                exit_multiple = self.get_sector_exit_multiple()
+            
+            term_value = fcf * exit_multiple
+            terminal_info["exit_multiple"] = exit_multiple
+            terminal_info["terminal_fcf"] = fcf
+        else:
+            # Gordon Growth Method: Terminal Value = FCF × (1 + g) / (WACC - g)
+            # Assumes perpetual stable growth - better for mature companies
+            if wacc <= term_growth:
+                raise ValueError(f"WACC ({wacc:.1%}) must be > terminal growth ({term_growth:.1%})")
+            
+            term_value = fcf * (1 + term_growth) / (wacc - term_growth)
+            terminal_info["perpetuity_growth"] = term_growth
+            terminal_info["terminal_fcf"] = fcf * (1 + term_growth)
+        
+        # Discount terminal value to present
         term_pv = term_value / ((1 + wacc) ** years)
+        terminal_info["terminal_value"] = term_value
+        terminal_info["terminal_pv"] = term_pv
 
-        return cash_flows, pv_explicit, term_pv, pv_explicit + term_pv
+        return cash_flows, pv_explicit, term_pv, pv_explicit + term_pv, terminal_info
 
     def calculate_wacc(self, beta: Optional[float] = None) -> float:
         """Calculate WACC using CAPM."""
@@ -210,6 +241,33 @@ class DCFEngine:
         }
         return benchmarks.get(sector)
     
+    def get_sector_exit_multiple(self, sector: Optional[str] = None) -> float:
+        """Get sector-appropriate exit multiple (EV/FCF) for terminal value.
+        
+        Exit multiples represent what buyers would pay for the business at end of forecast period.
+        Much more realistic than Gordon Growth for high-growth/tech companies.
+        """
+        if sector is None:
+            sector = self._company_data.sector if self._company_data else "Technology"
+        
+        # Industry-standard exit multiples (EV/FCF) by sector
+        # Sources: Investment banking comps, historical M&A data
+        exit_multiples = {
+            "Technology": 25.0,              # High-growth SaaS, AI, Cloud
+            "Communication Services": 22.0,  # Social media, streaming
+            "Healthcare": 18.0,              # Biotech, medtech
+            "Consumer Cyclical": 15.0,       # E-commerce, consumer discretionary
+            "Industrials": 12.0,             # Manufacturing, logistics
+            "Financial Services": 12.0,      # Banks, fintech
+            "Consumer Defensive": 14.0,      # Consumer staples
+            "Energy": 10.0,                  # Oil & gas, renewables
+            "Utilities": 12.0,               # Regulated utilities
+            "Real Estate": 20.0,             # REITs, property
+            "Basic Materials": 10.0,         # Mining, chemicals
+        }
+        
+        return exit_multiples.get(sector, 15.0)  # Default to 15x if sector unknown
+    
     def calculate_ev_sales_valuation(self) -> dict:
         """Calculate valuation using EV/Sales multiple for negative FCF companies."""
         if not self.is_ready:
@@ -265,8 +323,15 @@ class DCFEngine:
         }
 
     def get_intrinsic_value(self, growth: Optional[float] = None, term_growth: float = 0.025,
-                            wacc: Optional[float] = None, years: int = 5) -> dict:
-        """Calculate intrinsic value per share."""
+                            wacc: Optional[float] = None, years: int = 5,
+                            terminal_method: Optional[str] = None,
+                            exit_multiple: Optional[float] = None) -> dict:
+        """Calculate intrinsic value per share.
+        
+        Args:
+            terminal_method: 'gordon_growth' or 'exit_multiple' (auto-selects if None)
+            exit_multiple: Custom exit multiple for terminal value (uses sector default if None)
+        """
         if not self.is_ready:
             raise RuntimeError(f"No data for {self.ticker}: {self._last_error}")
 
@@ -280,9 +345,15 @@ class DCFEngine:
         # Use DCF for profitable companies
         growth = growth if growth is not None else (data.analyst_growth or 0.05)
         wacc = wacc if wacc is not None else self.calculate_wacc(data.beta)
+        
+        # Smart default: Use exit multiple for high-growth/tech, Gordon Growth for mature
+        if terminal_method is None:
+            high_growth_sectors = {"Technology", "Communication Services", "Healthcare"}
+            is_high_growth = growth > 0.10 or data.sector in high_growth_sectors
+            terminal_method = "exit_multiple" if is_high_growth else "gordon_growth"
 
-        cash_flows, pv_explicit, term_pv, ev = self.calculate_dcf(
-            data.fcf, growth, term_growth, wacc, years
+        cash_flows, pv_explicit, term_pv, ev, terminal_info = self.calculate_dcf(
+            data.fcf, growth, term_growth, wacc, years, terminal_method, exit_multiple
         )
 
         # Ensure value per share is never negative (mathematical floor)
@@ -306,9 +377,11 @@ class DCFEngine:
             "pv_explicit": pv_explicit,
             "term_pv": term_pv,
             "cash_flows": cash_flows,
+            "terminal_info": terminal_info,
             "valuation_method": "DCF",
             "assessment": assessment,
-            "inputs": {"growth": growth, "term_growth": term_growth, "wacc": wacc, "years": years},
+            "inputs": {"growth": growth, "term_growth": term_growth, "wacc": wacc, 
+                      "years": years, "terminal_method": terminal_method},
             "company_data": data.to_dict(),
         }
 
@@ -330,10 +403,16 @@ class DCFEngine:
         }
 
         results = {}
+        # Determine terminal method
+        high_growth_sectors = {"Technology", "Communication Services", "Healthcare"}
+        is_high_growth = base_growth > 0.10 or data.sector in high_growth_sectors
+        terminal_method = "exit_multiple" if is_high_growth else "gordon_growth"
+        
         for name, params in scenarios.items():
             try:
-                _, _, _, ev = self.calculate_dcf(
-                    data.fcf, params["growth"], base_term_growth, params["wacc"], years
+                _, _, _, ev, _ = self.calculate_dcf(
+                    data.fcf, params["growth"], base_term_growth, params["wacc"], years,
+                    terminal_method=terminal_method
                 )
                 vps = ev / data.shares if data.shares > 0 else 0
                 upside = ((vps - data.current_price) / data.current_price * 100
@@ -368,8 +447,14 @@ class DCFEngine:
         base_growth = base_growth if base_growth is not None else (data.analyst_growth or 0.05)
         base_wacc = base_wacc if base_wacc is not None else self.calculate_wacc(data.beta)
 
+        # Determine terminal method
+        high_growth_sectors = {"Technology", "Communication Services", "Healthcare"}
+        is_high_growth = base_growth > 0.10 or data.sector in high_growth_sectors
+        terminal_method = "exit_multiple" if is_high_growth else "gordon_growth"
+        
         results = {
-            "base_inputs": {"growth": base_growth, "wacc": base_wacc, "term_growth": base_term_growth},
+            "base_inputs": {"growth": base_growth, "wacc": base_wacc, "term_growth": base_term_growth,
+                           "terminal_method": terminal_method},
             "current_price": data.current_price,
             "growth_sensitivity": {},
             "wacc_sensitivity": {},
@@ -377,14 +462,16 @@ class DCFEngine:
 
         for g in [x * 0.01 for x in range(2, 16)]:
             try:
-                _, _, _, ev = self.calculate_dcf(data.fcf, g, base_term_growth, base_wacc, years)
+                _, _, _, ev, _ = self.calculate_dcf(data.fcf, g, base_term_growth, base_wacc, years,
+                                                    terminal_method=terminal_method)
                 results["growth_sensitivity"][round(g * 100, 1)] = ev / data.shares
             except ValueError:
                 pass
 
         for w in [x * 0.001 for x in range(80, 160, 5)]:
             try:
-                _, _, _, ev = self.calculate_dcf(data.fcf, base_growth, base_term_growth, w, years)
+                _, _, _, ev, _ = self.calculate_dcf(data.fcf, base_growth, base_term_growth, w, years,
+                                                    terminal_method=terminal_method)
                 results["wacc_sensitivity"][round(w * 100, 1)] = ev / data.shares
             except ValueError:
                 pass
