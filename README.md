@@ -6,21 +6,25 @@ Integrates fundamental analysis (DCF) with modern portfolio theory to generate d
 
 ## ✨ Features
 
-### 📊 DCF Valuation
-- Automated intrinsic value calculation with WACC and terminal value
-- **Robust growth rate normalization** (handles yfinance data quirks)
+### 📊 Valuation Engine
+- **DCF with Exit Multiple**: Industry-standard terminal value for high-growth stocks (Tech 25x, Healthcare 18x)
+- **Reverse DCF**: Calculate implied growth rate from market price - "what's priced in?"
+- **Auto-method selection**: Smart switching between exit multiple (growth stocks) and Gordon Growth (mature)
+- **EV/Sales fallback**: Automatic valuation for loss-making companies
 - Scenario analysis (Bull/Base/Bear cases)
 - Sensitivity analysis for key assumptions
-- Multi-stock comparison and ranking
-- Extreme value protection with configurable growth caps
+- Multi-stock comparison with ranking
+- Robust growth rate normalization (handles data quirks)
 - CSV export capabilities
 
 ### 🎯 Portfolio Optimization
 - Black-Litterman model with DCF-informed views
 - Market regime detection (200-day SMA + VIX term structure)
-- Multiple strategies: Max Sharpe, Min Volatility, Efficient Risk
+- **6 optimization methods**: Max Sharpe, Min Volatility, Efficient Risk, Efficient Return, Max Quadratic Utility, Equal Weight
+- **Interactive method selection**: Choose objective based on investment goals
 - Discrete allocation with integer share quantities
 - Confidence-weighted view integration
+- Smart diversification (default 30% max per position)
 
 ### 🎨 Interface
 - Rich terminal UI with tables and formatting
@@ -72,9 +76,16 @@ uv run main.py valuation AAPL MSFT GOOGL --compare
 from modules.valuation import DCFEngine
 
 engine = DCFEngine("AAPL")
+
+# Forward DCF (auto-selects exit multiple for tech stocks)
 result = engine.get_intrinsic_value()
 print(f"Fair Value: ${result['value_per_share']:.2f}")
 print(f"Upside: {result['upside_downside']:+.1f}%")
+
+# Reverse DCF - What's the market pricing in?
+reverse = engine.calculate_implied_growth()
+print(f"Market implies {reverse['implied_growth']*100:.1f}% CAGR")
+print(f"Assessment: {reverse['assessment']}")
 
 # Scenario analysis
 scenarios = engine.run_scenario_analysis()
@@ -147,9 +158,11 @@ quant-portfolio-manager/
 - Python 3.12+, yfinance, PyPortfolioOpt, NumPy, Pandas, Rich
 
 **Algorithms:**
-- DCF: Explicit forecast + Gordon Growth terminal value
-- Black-Litterman: Bayesian posterior with analyst views
-- Regime Detection: 200-day SMA + VIX term structure
+- **DCF Terminal Value**: Exit Multiple (EV/FCF) for growth stocks, Gordon Growth for mature companies
+- **Reverse DCF**: scipy.optimize.brentq bracketing method (robust to discontinuities)
+- **Black-Litterman**: Bayesian posterior with DCF-derived views
+- **Regime Detection**: 200-day SMA + VIX term structure
+- **Portfolio Optimization**: Mean-variance with 6 objective functions
 
 **Data Quality & Robustness:**
 - Growth rate normalization: Automatically detects and converts percentage formats

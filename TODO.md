@@ -1,21 +1,27 @@
 # Quant Portfolio Manager - Development Status
 
-**Last Updated**: December 22, 2025
+**Last Updated**: December 24, 2025
 
 ## ✅ Complete Features
 
-### DCF Valuation Engine
-- Core DCF calculation (explicit forecast + terminal value)
+### Valuation Engine
+- **Exit Multiple Terminal Value** - Sector-appropriate EV/FCF multiples for high-growth stocks
+- **Reverse DCF** - Calculate implied growth rate from market price (scipy.optimize.brentq)
+- **Smart Terminal Method Selection** - Auto-switches between exit multiple and Gordon Growth
+- **EV/Sales Valuation** - Automatic fallback for loss-making companies
+- Core DCF calculation (explicit forecast + flexible terminal value)
 - Real-time data fetching via yfinance
 - Scenario analysis (Bull/Base/Bear)
 - Sensitivity analysis (Growth/WACC)
 - Multi-stock comparison with ranking
 
 ### Portfolio Optimization
+- **6 Optimization Methods**: Max Sharpe, Min Volatility, Efficient Risk, Efficient Return, Max Quadratic Utility, Equal Weight
+- **Interactive Method Selection** - User chooses optimization objective
 - Mean-Variance Optimization (Markowitz)
-- Max Sharpe, Min Volatility, Efficient Risk objectives
 - Black-Litterman model with DCF-derived views
 - Discrete share allocation
+- Smart diversification (30% max per position default)
 - CAPM-based expected returns
 - Ledoit-Wolf covariance shrinkage
 
@@ -56,10 +62,15 @@ uv run main.py portfolio
 from modules.valuation import DCFEngine
 from modules.portfolio import PortfolioEngine, RegimeDetector
 
-# DCF Analysis
+# Forward DCF (auto-selects terminal method)
 engine = DCFEngine("AAPL")
 result = engine.get_intrinsic_value()
 print(f"Fair Value: ${result['value_per_share']:.2f}")
+
+# Reverse DCF - What growth is priced in?
+reverse = engine.calculate_implied_growth()
+print(f"Market implies: {reverse['implied_growth']*100:.1f}% CAGR")
+print(f"Gap vs Analyst: {reverse['gap']*100:+.1f}pp")
 
 # Market Regime
 detector = RegimeDetector()
