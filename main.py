@@ -54,129 +54,155 @@ def print_msg(msg: str, style: str = "info"):
         print(f"{sym} {msg}")
 
 
-def display_valuation(result: dict, engine=None):
-    """Display valuation result."""
+def display_valuation(result: dict, engine=None, detailed: bool = False):
+    """Display valuation result with insight-first presentation."""
     method = result.get('valuation_method', 'DCF')
+    ticker = result['ticker']
     
-    if HAS_RICH and console:
-        table = Table(title=f"{method} Valuation - {result['ticker']}", box=box.ROUNDED)
-        table.add_column("Metric", style="dim")
-        table.add_column("Value", justify="right")
-        
-        table.add_row("Current Price", f"${result['current_price']:.2f}")
-        table.add_row("Fair Value", f"${result['value_per_share']:.2f}")
-        
-        upside = result['upside_downside']
-        color = "green" if upside > 20 else "red" if upside < -20 else "yellow"
-        table.add_row("Upside/Downside", f"[{color}]{upside:+.1f}%[/{color}]")
-        table.add_row("Enterprise Value", f"${result['enterprise_value']:,.0f}M")
-        
-        assess = result['assessment']
-        emoji = "🟢" if "UNDER" in assess else "🔴" if "OVER" in assess else "🟡"
-        table.add_row("Assessment", f"{emoji} {assess}")
-        table.add_row("Method", f"[cyan]{method}[/cyan]")
-        
-        console.print(table)
-        
-        # Show method-specific details
-        if method == "DCF" and "cash_flows" in result:
-            # Cash flows
-            cf_table = Table(title="Cash Flow Projections", box=box.SIMPLE)
-            cf_table.add_column("Year", justify="center")
-            cf_table.add_column("FCF ($M)", justify="right")
-            cf_table.add_column("PV ($M)", justify="right")
-            for cf in result["cash_flows"]:
-                cf_table.add_row(str(cf["year"]), f"{cf['fcf']:,.0f}", f"{cf['pv']:,.0f}")
-            console.print(cf_table)
-            
-            # Show growth cleaning warning if applicable
-            if "growth_cleaning" in result and result["growth_cleaning"]:
-                console.print(f"\n[yellow]{result['growth_cleaning']}[/yellow]")
-            
-            inputs = result["inputs"]
-            terminal_info = result.get("terminal_info", {})
-            
-            # Build assumptions string with terminal method info
-            assumptions = (f"Growth: {inputs['growth']*100:.1f}% | WACC: {inputs['wacc']*100:.1f}% | "
-                          f"Years: {inputs['years']}")
-            
-            # Add terminal value method details
-            if terminal_info.get("method") == "exit_multiple":
-                assumptions += f" | Exit Multiple: {terminal_info.get('exit_multiple', 0):.1f}x"
-            else:
-                assumptions += f" | Terminal Growth: {inputs['term_growth']*100:.1f}%"
-            
-            console.print(Panel(assumptions, title="Assumptions", box=box.ROUNDED))
-            
-            # Show terminal value breakdown
-            if terminal_info:
-                term_table = Table(title="Terminal Value", box=box.SIMPLE, show_header=False)
-                term_table.add_column("Item", style="dim")
-                term_table.add_column("Value", justify="right")
-                
-                method_name = "Exit Multiple" if terminal_info.get("method") == "exit_multiple" else "Gordon Growth"
-                term_table.add_row("Method", f"[cyan]{method_name}[/cyan]")
-                term_table.add_row("Terminal Value", f"${terminal_info.get('terminal_value', 0):,.0f}M")
-                term_table.add_row("PV Terminal", f"${terminal_info.get('terminal_pv', 0):,.0f}M")
-                term_table.add_row("PV Explicit FCF", f"${result.get('pv_explicit', 0):,.0f}M")
-                
-                # Show percentage contribution
-                pv_explicit = result.get('pv_explicit', 0)
-                term_pv = terminal_info.get('terminal_pv', 0)
-                total = pv_explicit + term_pv
-                if total > 0:
-                    term_pct = (term_pv / total) * 100
-                    term_table.add_row("Terminal % of Value", f"{term_pct:.1f}%")
-                
-                console.print(term_table)
-            
-            # Reverse DCF Analysis
-            if engine:
-                try:
-                    reverse = engine.calculate_implied_growth()
-                    
-                    if reverse.get("status") == "success":
-                        console.print("\n[bold cyan]Reverse DCF Analysis[/bold cyan]")
-                        
-                        rev_table = Table(box=box.SIMPLE, show_header=False)
-                        rev_table.add_column("Metric", style="dim")
-                        rev_table.add_column("Value", justify="right")
-                        
-                        impl = reverse['implied_growth']
-                        anly = reverse['analyst_growth']
-                        gap = reverse['gap']
-                        
-                        impl_color = "red" if impl > 0.30 else "yellow" if impl > 0.15 else "green"
-                        gap_color = "red" if abs(gap) > 0.15 else "yellow" if abs(gap) > 0.05 else "green"
-                        
-                        rev_table.add_row("Market Price", f"${reverse['target_price']:.2f}")
-                        rev_table.add_row("Implied Growth (CAGR)", f"[{impl_color}]{impl*100:.1f}%[/{impl_color}]")
-                        rev_table.add_row("Analyst Consensus", f"{anly*100:.1f}%")
-                        rev_table.add_row("Gap (Implied - Analyst)", f"[{gap_color}]{gap*100:+.1f}pp[/{gap_color}]")
-                        rev_table.add_row("Assessment", f"[dim]{reverse['assessment']}[/dim]")
-                        
-                        console.print(rev_table)
-                    elif "error" in reverse and reverse.get("status") != "no_solution_in_bounds":
-                        console.print(f"[dim]⚠ Reverse DCF: {reverse['error']}[/dim]")
-                except Exception:
-                    pass  # Silently skip reverse DCF if it fails
-                
-        elif method == "EV/Sales":
-            # Show EV/Sales inputs
-            inputs = result["inputs"]
-            console.print(Panel(
-                f"Revenue: ${inputs['revenue']:,.0f}M | Sector: {inputs['sector']} | "
-                f"Avg EV/Sales: {inputs['avg_ev_sales_multiple']:.2f}x",
-                title="EV/Sales Inputs", box=box.ROUNDED,
-            ))
-    else:
-        print(f"\n{'=' * 50}\n{method} VALUATION - {result['ticker']}\n{'=' * 50}")
+    if not HAS_RICH or not console:
+        # Fallback for non-Rich environments
+        print(f"\n{'=' * 50}\n{method} VALUATION - {ticker}\n{'=' * 50}")
         print(f"Current: ${result['current_price']:.2f} | Fair Value: ${result['value_per_share']:.2f}")
         print(f"Upside: {result['upside_downside']:+.1f}% | {result['assessment']}")
-        if "cash_flows" in result:
-            print("\nCash Flows:")
-            for cf in result["cash_flows"]:
-                print(f"  Year {cf['year']}: FCF ${cf['fcf']:,.0f}M, PV ${cf['pv']:,.0f}M")
+        return
+    
+    # Executive Summary Panel
+    upside = result['upside_downside']
+    current = result['current_price']
+    fair = result['value_per_share']
+    
+    # Build summary content
+    summary_lines = []
+    summary_lines.append(f"[bold]Current Price:[/bold]  ${current:.2f}")
+    
+    upside_color = "green" if upside > 20 else "red" if upside < -20 else "yellow"
+    summary_lines.append(f"[bold]Fair Value:[/bold]     ${fair:.2f}  ([{upside_color}]{upside:+.1f}%[/{upside_color}])")
+    
+    assess = result['assessment']
+    emoji = "🟢" if "UNDER" in assess else "🔴" if "OVER" in assess else "🟡"
+    summary_lines.append(f"[bold]Assessment:[/bold]     {emoji} {assess}")
+    summary_lines.append("")
+    
+    # Key Insight (Reverse DCF)
+    if engine and method == "DCF":
+        try:
+            reverse = engine.calculate_implied_growth()
+            if reverse.get("status") == "success":
+                impl = reverse['implied_growth']
+                anly = reverse['analyst_growth']
+                gap = reverse['gap']
+                
+                summary_lines.append("[bold cyan]💡 Key Insight:[/bold cyan]")
+                impl_pct = impl * 100
+                anly_pct = anly * 100
+                
+                if gap > 0.10:  # Market expects more than analysts
+                    summary_lines.append(f"Market prices in [yellow]{impl_pct:.1f}%[/yellow] growth. Analysts expect [cyan]{anly_pct:.1f}%[/cyan].")
+                    summary_lines.append(f"[yellow]Market is more optimistic than analysts ([yellow]{gap*100:+.1f}pp[/yellow] gap).[/yellow]")
+                elif gap < -0.10:  # Analysts expect more than market
+                    summary_lines.append(f"Market prices in [cyan]{impl_pct:.1f}%[/cyan] growth. Analysts expect [yellow]{anly_pct:.1f}%[/yellow].")
+                    summary_lines.append(f"[green]If analysts are right, significant upside potential.[/green]")
+                else:
+                    summary_lines.append(f"Market and analysts aligned: ~[cyan]{impl_pct:.1f}%[/cyan] growth expected.")
+                summary_lines.append("")
+        except Exception:
+            pass
+    
+    # Monte Carlo (if engine available)
+    if engine and method == "DCF":
+        try:
+            import numpy as np
+            np.random.seed(42)  # Consistent results
+            mc_result = engine.simulate_value(iterations=3000)  # Faster for CLI
+            
+            if "error" not in mc_result:
+                prob = mc_result['prob_undervalued']
+                var = mc_result['var_95']
+                upside_95 = mc_result['upside_95']
+                
+                summary_lines.append("[bold cyan]📊 Monte Carlo Analysis:[/bold cyan] [dim](3,000 simulations)[/dim]")
+                
+                prob_color = "green" if prob > 75 else "yellow" if prob > 40 else "red"
+                summary_lines.append(f"Probability Undervalued: [{prob_color}]{prob:.1f}%[/{prob_color}]")
+                
+                var_pct = (var - current) / current * 100
+                up_pct = (upside_95 - current) / current * 100
+                var_color = "green" if var_pct > 0 else "yellow" if var_pct > -15 else "red"
+                summary_lines.append(f"Worst Case (5th %ile): [{var_color}]${var:.2f} ({var_pct:+.1f}%)[/{var_color}]")
+                summary_lines.append(f"Best Case (95th %ile): [green]${upside_95:.2f} ({up_pct:+.1f}%)[/green]")
+                summary_lines.append("")
+        except Exception:
+            pass
+    
+    # Display executive summary
+    summary_text = "\n".join(summary_lines)
+    console.print(Panel(summary_text, title=f"[bold]{ticker} Analysis[/bold]", 
+                       border_style="cyan", box=box.ROUNDED))
+    
+    # Technical details (only if --detailed flag)
+    if detailed and method == "DCF" and "cash_flows" in result:
+        console.print("\n[dim]═══ Technical Details ═══[/dim]\n")
+        
+        # Assumptions
+        inputs = result["inputs"]
+        terminal_info = result.get("terminal_info", {})
+        
+        assumptions = (f"Growth: [cyan]{inputs['growth']*100:.1f}%[/cyan] | "
+                      f"WACC: [cyan]{inputs['wacc']*100:.1f}%[/cyan] | "
+                      f"Years: [cyan]{inputs['years']}[/cyan]")
+        
+        if terminal_info.get("method") == "exit_multiple":
+            assumptions += f" | Exit Multiple: [cyan]{terminal_info.get('exit_multiple', 0):.1f}x[/cyan]"
+        else:
+            assumptions += f" | Terminal Growth: [cyan]{inputs['term_growth']*100:.1f}%[/cyan]"
+        
+        console.print(Panel(assumptions, title="Assumptions", box=box.ROUNDED))
+        
+        # Cash flows
+        cf_table = Table(title="Cash Flow Projections", box=box.SIMPLE)
+        cf_table.add_column("Year", justify="center")
+        cf_table.add_column("FCF ($M)", justify="right")
+        cf_table.add_column("PV ($M)", justify="right")
+        for cf in result["cash_flows"]:
+            cf_table.add_row(str(cf["year"]), f"{cf['fcf']:,.0f}", f"{cf['pv']:,.0f}")
+        console.print(cf_table)
+        
+        # Terminal value breakdown
+        if terminal_info:
+            term_table = Table(title="Terminal Value Breakdown", box=box.SIMPLE, show_header=False)
+            term_table.add_column("Item", style="dim")
+            term_table.add_column("Value", justify="right")
+            
+            method_name = "Exit Multiple" if terminal_info.get("method") == "exit_multiple" else "Gordon Growth"
+            term_table.add_row("Method", f"[cyan]{method_name}[/cyan]")
+            term_table.add_row("Terminal Value", f"${terminal_info.get('terminal_value', 0):,.0f}M")
+            term_table.add_row("PV Terminal", f"${terminal_info.get('terminal_pv', 0):,.0f}M")
+            term_table.add_row("PV Explicit FCF", f"${result.get('pv_explicit', 0):,.0f}M")
+            
+            pv_explicit = result.get('pv_explicit', 0)
+            term_pv = terminal_info.get('terminal_pv', 0)
+            total = pv_explicit + term_pv
+            if total > 0:
+                term_pct = (term_pv / total) * 100
+                term_table.add_row("Terminal % of Value", f"{term_pct:.1f}%")
+            
+            console.print(term_table)
+        
+        # Growth cleaning warning
+        if "growth_cleaning" in result and result["growth_cleaning"]:
+            console.print(f"\n[yellow]{result['growth_cleaning']}[/yellow]")
+    
+    elif method == "EV/Sales":
+        inputs = result["inputs"]
+        console.print(Panel(
+            f"Revenue: ${inputs['revenue']:,.0f}M | Sector: {inputs['sector']} | "
+            f"Avg EV/Sales: {inputs['avg_ev_sales_multiple']:.2f}x",
+            title="EV/Sales Inputs", box=box.ROUNDED,
+        ))
+    
+    # Help message
+    if not detailed and method == "DCF":
+        console.print("\n[dim]💡 Run with --detailed flag for technical breakdown[/dim]")
 
 
 def display_scenarios(scenarios: dict, ticker: str):
@@ -551,6 +577,7 @@ def parse_args():
     val.add_argument("-s", "--scenarios", action="store_true", help="Scenario analysis")
     val.add_argument("--sensitivity", action="store_true", help="Sensitivity analysis")
     val.add_argument("-c", "--compare", action="store_true", help="Compare stocks")
+    val.add_argument("-d", "--detailed", action="store_true", help="Show detailed technical breakdown")
     val.add_argument("-e", "--export", type=str, help="Export CSV")
     
     sub.add_parser("portfolio", aliases=["port", "opt"], help="Portfolio Optimization")
@@ -612,7 +639,8 @@ def main():
             elif args.sensitivity:
                 display_sensitivity(engine.run_sensitivity_analysis(base_growth=growth, base_term_growth=term, base_wacc=wacc, years=args.years), ticker)
             else:
-                display_valuation(engine.get_intrinsic_value(growth=growth, term_growth=term, wacc=wacc, years=args.years), engine)
+                detailed = getattr(args, 'detailed', False)
+                display_valuation(engine.get_intrinsic_value(growth=growth, term_growth=term, wacc=wacc, years=args.years), engine, detailed=detailed)
         except Exception as e:
             print_msg(f"Error: {e}", "error")
             sys.exit(1)

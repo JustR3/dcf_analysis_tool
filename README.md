@@ -7,10 +7,12 @@ Integrates fundamental analysis (DCF) with modern portfolio theory to generate d
 ## ✨ Features
 
 ### 📊 Valuation Engine
+- **Insight-First UI**: Executive summary with key insights, Reverse DCF, and Monte Carlo probabilities
 - **DCF with Exit Multiple**: Industry-standard terminal value for high-growth stocks (Tech 25x, Healthcare 18x)
 - **Reverse DCF**: Calculate implied growth rate from market price - "what's priced in?"
 - **Bayesian Growth Cleaning**: Sector-specific priors with 70/30 analyst/prior blending for data quality
-- **Monte Carlo Simulation**: 5,000 iterations with VaR, upside metrics, and probability analysis
+- **Monte Carlo Simulation**: 3,000-5,000 iterations with VaR, upside metrics, and probability analysis
+- **Progressive Disclosure**: Default executive view + `--detailed` flag for technical breakdown
 - **Auto-method selection**: Smart switching between exit multiple (growth stocks) and Gordon Growth (mature)
 - **EV/Sales fallback**: Automatic valuation for loss-making companies
 - Scenario analysis (Bull/Base/Bear cases)
@@ -50,8 +52,11 @@ uv sync
 # Interactive mode
 uv run main.py
 
-# Quick DCF valuation
+# Quick DCF valuation (executive summary)
 uv run main.py valuation AAPL
+
+# Detailed technical breakdown
+uv run main.py valuation AAPL --detailed
 
 # Multi-stock comparison
 uv run main.py valuation AAPL MSFT GOOGL --compare
@@ -68,6 +73,11 @@ Calculate intrinsic value using discounted cash flow analysis:
 
 **CLI:**
 ```bash
+# Executive summary (default) - Shows key insight + Monte Carlo probabilities
+uv run main.py valuation AAPL
+
+# Detailed technical view - Includes cash flows, terminal value breakdown
+uv run main.py valuation AAPL --detailed
 uv run main.py valuation AAPL
 uv run main.py valuation TSLA --growth 12 --wacc 10
 uv run main.py valuation AAPL MSFT GOOGL --compare
