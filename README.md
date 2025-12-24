@@ -9,6 +9,8 @@ Integrates fundamental analysis (DCF) with modern portfolio theory to generate d
 ### 📊 Valuation Engine
 - **DCF with Exit Multiple**: Industry-standard terminal value for high-growth stocks (Tech 25x, Healthcare 18x)
 - **Reverse DCF**: Calculate implied growth rate from market price - "what's priced in?"
+- **Bayesian Growth Cleaning**: Sector-specific priors with 70/30 analyst/prior blending for data quality
+- **Monte Carlo Simulation**: 5,000 iterations with VaR, upside metrics, and probability analysis
 - **Auto-method selection**: Smart switching between exit multiple (growth stocks) and Gordon Growth (mature)
 - **EV/Sales fallback**: Automatic valuation for loss-making companies
 - Scenario analysis (Bull/Base/Bear cases)
@@ -87,6 +89,13 @@ reverse = engine.calculate_implied_growth()
 print(f"Market implies {reverse['implied_growth']*100:.1f}% CAGR")
 print(f"Assessment: {reverse['assessment']}")
 
+# Monte Carlo simulation for probabilistic valuation
+mc_result = engine.simulate_value(iterations=5000)
+print(f"Median Value: ${mc_result['median_value']:.2f}")
+print(f"P(Undervalued): {mc_result['prob_undervalued']:.1f}%")
+print(f"VaR 95%: ${mc_result['var_95']:.2f}")
+print(f"Assessment: {mc_result['assessment']}")
+
 # Scenario analysis
 scenarios = engine.run_scenario_analysis()
 
@@ -160,13 +169,17 @@ quant-portfolio-manager/
 **Algorithms:**
 - **DCF Terminal Value**: Exit Multiple (EV/FCF) for growth stocks, Gordon Growth for mature companies
 - **Reverse DCF**: scipy.optimize.brentq bracketing method (robust to discontinuities)
+- **Bayesian Growth Cleaning**: 11 sector-specific priors with weighted blending (70% analyst, 30% prior)
+- **Monte Carlo**: 5,000 iterations with stochastic growth/WACC/exit multiples, VaR and probability metrics
 - **Black-Litterman**: Bayesian posterior with DCF-derived views
 - **Regime Detection**: 200-day SMA + VIX term structure
 - **Portfolio Optimization**: Mean-variance with 6 objective functions
 
 **Data Quality & Robustness:**
+- Bayesian cleaning: Sector priors prevent extreme/unrealistic analyst growth rates
+- Soft bounds: -50% to +100% growth (allows temporary declines, prevents absurd forecasts)
 - Growth rate normalization: Automatically detects and converts percentage formats
-- Extreme value protection: Caps analyst growth rates at 50% maximum
+- Probabilistic framework: Monte Carlo provides confidence intervals and risk metrics
 - Comprehensive test suite: Full pipeline validation from DCF to portfolio allocation
 
 ## 📄 License

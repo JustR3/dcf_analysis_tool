@@ -7,6 +7,8 @@
 ### Valuation Engine
 - **Exit Multiple Terminal Value** - Sector-appropriate EV/FCF multiples for high-growth stocks
 - **Reverse DCF** - Calculate implied growth rate from market price (scipy.optimize.brentq)
+- **Bayesian Growth Cleaning** - 11 sector priors with 70/30 analyst/prior blending, soft bounds (-50% to +100%)
+- **Monte Carlo Simulation** - 5,000 iterations with VaR, upside 95%, P(undervalued), risk/reward metrics
 - **Smart Terminal Method Selection** - Auto-switches between exit multiple and Gordon Growth
 - **EV/Sales Valuation** - Automatic fallback for loss-making companies
 - Core DCF calculation (explicit forecast + flexible terminal value)
@@ -71,6 +73,13 @@ print(f"Fair Value: ${result['value_per_share']:.2f}")
 reverse = engine.calculate_implied_growth()
 print(f"Market implies: {reverse['implied_growth']*100:.1f}% CAGR")
 print(f"Gap vs Analyst: {reverse['gap']*100:+.1f}pp")
+
+# Monte Carlo simulation for probabilistic valuation
+mc_result = engine.simulate_value(iterations=5000)
+print(f"P(Undervalued): {mc_result['prob_undervalued']:.1f}%")
+print(f"Median Value: ${mc_result['median_value']:.2f}")
+print(f"VaR 95%: ${mc_result['var_95']:.2f} (downside risk)")
+print(f"Upside 95%: ${mc_result['upside_95']:.2f} (upside potential)")
 
 # Market Regime
 detector = RegimeDetector()
