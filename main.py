@@ -54,6 +54,78 @@ def print_msg(msg: str, style: str = "info"):
         print(f"{sym} {msg}")
 
 
+def calculate_conviction_rating(upside: float, mc_probability: float) -> tuple[str, str, str]:
+    """Calculate conviction rating from upside and Monte Carlo probability.
+    
+    Returns:
+        tuple: (conviction_label, conviction_color, conviction_emoji)
+    """
+    if upside > 15 and mc_probability > 75:
+        return "HIGH CONVICTION", "bold green", "🟢"
+    elif upside > 15 and mc_probability < 60:
+        return "SPECULATIVE", "bold yellow", "🟡"
+    elif upside < 15:
+        return "HOLD/PASS", "bold red" if upside < 0 else "dim", "🔴" if upside < 0 else "⚪"
+    else:  # upside > 15 and 60 <= mc_probability <= 75
+        return "MODERATE", "yellow", "🟡"
+
+
+def enrich_dcf_with_monte_carlo(engine: DCFEngine, result: dict) -> dict:
+    """Enrich DCF result with Monte Carlo, Reverse DCF, and Conviction Rating.
+    
+    Args:
+        engine: DCFEngine instance (must be ready)
+        result: Basic DCF result from get_intrinsic_value()
+    
+    Returns:
+        Enriched result dictionary with additional fields
+    """
+    enriched = result.copy()
+    
+    # Monte Carlo simulation
+    try:
+        import numpy as np
+        np.random.seed(42)
+        mc_result = engine.simulate_value(iterations=3000)
+        
+        if "error" not in mc_result:
+            enriched['monte_carlo'] = {
+                'probability': mc_result['prob_undervalued'],
+                'var_95': mc_result['var_95'],
+                'upside_95': mc_result['upside_95'],
+                'median_value': mc_result['median_value']
+            }
+            
+            # Conviction rating
+            conviction, color, emoji = calculate_conviction_rating(
+                result['upside_downside'],
+                mc_result['prob_undervalued']
+            )
+            enriched['conviction'] = {
+                'label': conviction,
+                'color': color,
+                'emoji': emoji
+            }
+    except Exception:
+        enriched['monte_carlo'] = None
+        enriched['conviction'] = {'label': 'N/A', 'color': 'dim', 'emoji': '⚪'}
+    
+    # Reverse DCF
+    try:
+        reverse = engine.calculate_implied_growth()
+        if reverse.get('status') == 'success':
+            enriched['reverse_dcf'] = {
+                'implied_growth': reverse['implied_growth'],
+                'analyst_growth': reverse['analyst_growth'],
+                'gap': reverse['gap'],
+                'assessment': reverse['assessment']
+            }
+    except Exception:
+        enriched['reverse_dcf'] = None
+    
+    return enriched
+
+
 def display_valuation(result: dict, engine=None, detailed: bool = False):
     """Display valuation result with insight-first presentation."""
     method = result.get('valuation_method', 'DCF')
@@ -83,28 +155,11 @@ def display_valuation(result: dict, engine=None, detailed: bool = False):
         except Exception:
             pass
     
-    # Calculate Conviction Rating
-    conviction = "N/A"
-    conviction_color = "dim"
-    conviction_emoji = "⚪"
-    
+    # Calculate Conviction Rating using extracted function
     if mc_probability is not None:
-        if upside > 15 and mc_probability > 75:
-            conviction = "HIGH CONVICTION"
-            conviction_color = "bold green"
-            conviction_emoji = "🟢"
-        elif upside > 15 and mc_probability < 60:
-            conviction = "SPECULATIVE"
-            conviction_color = "bold yellow"
-            conviction_emoji = "🟡"
-        elif upside < 15:
-            conviction = "HOLD/PASS"
-            conviction_color = "bold red" if upside < 0 else "dim"
-            conviction_emoji = "🔴" if upside < 0 else "⚪"
-        else:  # upside > 15 and 60 <= mc_probability <= 75
-            conviction = "MODERATE"
-            conviction_color = "yellow"
-            conviction_emoji = "🟡"
+        conviction, conviction_color, conviction_emoji = calculate_conviction_rating(upside, mc_probability)
+    else:
+        conviction, conviction_color, conviction_emoji = "N/A", "dim", "⚪"
     
     # Build summary content
     summary_lines = []
@@ -348,35 +403,87 @@ def display_sensitivity(sensitivity: dict, ticker: str):
 
 
 def display_portfolio(result: dict, regime: str = "UNKNOWN"):
-    """Display portfolio optimization results."""
+    """Display portfolio optimization results with conviction and probability."""
     if HAS_RICH and console:
         table = Table(title="Portfolio Optimization", box=box.ROUNDED)
         table.add_column("Ticker", style="bold")
         table.add_column("Weight", justify="right")
-        table.add_column("DCF Value", justify="right")
+        table.add_column("Fair Value", justify="right")
         table.add_column("Price", justify="right")
         table.add_column("Upside", justify="right")
+        table.add_column("Conviction", justify="center")
+        table.add_column("MC Prob", justify="right")
         
         weights = result.get("weights", {})
         dcf = result.get("dcf_results", {})
+        
+        # Calculate portfolio conviction metrics
+        total_weight = sum(weights.values())
+        high_conviction_weight = 0
+        moderate_weight = 0
+        speculative_weight = 0
         
         for ticker in sorted(weights, key=lambda t: weights[t], reverse=True):
             w = weights[ticker]
             d = dcf.get(ticker, {})
             upside = d.get("upside_downside", 0)
-            color = "green" if upside > 0 else "red"
-            table.add_row(ticker, f"{w*100:.1f}%", f"${d.get('value_per_share', 0):.2f}",
-                          f"${d.get('current_price', 0):.2f}", f"[{color}]{upside:+.1f}%[/{color}]")
+            
+            # Get conviction data
+            conviction_data = d.get('conviction', {})
+            conviction = conviction_data.get('label', 'N/A')
+            conv_emoji = conviction_data.get('emoji', '⚪')
+            
+            # Get Monte Carlo probability
+            mc_data = d.get('monte_carlo', {})
+            mc_prob = mc_data.get('probability', 0) if mc_data else 0
+            
+            # Track conviction weights
+            if 'HIGH' in conviction:
+                high_conviction_weight += w
+            elif 'MODERATE' in conviction:
+                moderate_weight += w
+            elif 'SPECULATIVE' in conviction:
+                speculative_weight += w
+            
+            # Color coding
+            upside_color = "green" if upside > 0 else "red"
+            prob_color = "green" if mc_prob > 75 else "yellow" if mc_prob > 40 else "red"
+            
+            table.add_row(
+                ticker,
+                f"{w*100:.1f}%",
+                f"${d.get('value_per_share', 0):.2f}",
+                f"${d.get('current_price', 0):.2f}",
+                f"[{upside_color}]{upside:+.1f}%[/{upside_color}]",
+                f"{conv_emoji} {conviction}",
+                f"[{prob_color}]{mc_prob:.1f}%[/{prob_color}]"
+            )
+        
         console.print(table)
-        console.print(Panel(
-            f"Return: {result['expected_annual_return']:.2f}% | Vol: {result['annual_volatility']:.2f}% | "
-            f"Sharpe: {result['sharpe_ratio']:.2f} | Regime: {regime}",
-            title="Metrics", box=box.ROUNDED,
-        ))
+        
+        # Portfolio metrics
+        metrics_text = (
+            f"Return: {result['expected_annual_return']:.2f}% | "
+            f"Vol: {result['annual_volatility']:.2f}% | "
+            f"Sharpe: {result['sharpe_ratio']:.2f} | "
+            f"Regime: {regime}"
+        )
+        console.print(Panel(metrics_text, title="Metrics", box=box.ROUNDED))
+        
+        # Portfolio conviction breakdown
+        conviction_text = (
+            f"[bold green]High Conviction:[/bold green] {high_conviction_weight*100:.1f}% | "
+            f"[yellow]Moderate:[/yellow] {moderate_weight*100:.1f}% | "
+            f"[bold yellow]Speculative:[/bold yellow] {speculative_weight*100:.1f}%"
+        )
+        console.print(Panel(conviction_text, title="Portfolio Conviction Mix", box=box.ROUNDED))
+        
     else:
         print("\nPortfolio Optimization:")
         for t, w in result.get("weights", {}).items():
-            print(f"  {t}: {w*100:.1f}%")
+            d = dcf.get(t, {})
+            conviction = d.get('conviction', {}).get('label', 'N/A')
+            print(f"  {t}: {w*100:.1f}% ({conviction})")
         print(f"\nReturn: {result['expected_annual_return']:.2f}% | Vol: {result['annual_volatility']:.2f}%")
 
 
@@ -457,17 +564,27 @@ def run_portfolio_interactive():
     tickers = [t.strip().upper() for t in tickers_input.split(",")]
     print_msg(f"Analyzing {len(tickers)} stocks...")
     
-    # DCF analysis
+    # DCF analysis with full enrichment (Monte Carlo + Reverse DCF + Conviction)
     dcf_results = {}
     for ticker in tickers:
         try:
             engine = DCFEngine(ticker, auto_fetch=True)
             if engine.is_ready:
+                # Basic DCF
                 result = engine.get_intrinsic_value()
-                dcf_results[ticker] = result
-                upside = result['upside_downside']
+                
+                # Enrich with Monte Carlo, Reverse DCF, and Conviction
+                enriched_result = enrich_dcf_with_monte_carlo(engine, result)
+                dcf_results[ticker] = enriched_result
+                
+                # Display with conviction rating
+                upside = enriched_result['upside_downside']
+                conviction = enriched_result.get('conviction', {})
+                conv_emoji = conviction.get('emoji', '⚪')
+                conv_label = conviction.get('label', 'N/A')
+                
                 status = "🟢" if upside > 20 else "🔴" if upside < -20 else "🟡"
-                print_msg(f"{ticker}: ${result['value_per_share']:.2f} ({upside:+.1f}%) {status}", "success")
+                print_msg(f"{ticker}: ${enriched_result['value_per_share']:.2f} ({upside:+.1f}%) {status} {conv_emoji} {conv_label}", "success")
             else:
                 print_msg(f"{ticker}: {engine.last_error}", "error")
         except Exception as e:

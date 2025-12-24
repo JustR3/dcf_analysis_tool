@@ -194,35 +194,79 @@ class PortfolioEngine:
     def optimize_with_views(self, dcf_results: Dict[str, dict], confidence: float = 0.3,
                             method: OptimizationMethod = OptimizationMethod.MAX_SHARPE,
                             weight_bounds: Tuple[float, float] = (0, 1)) -> Optional[PortfolioMetrics]:
-        """Optimize using Black-Litterman with DCF valuations as views."""
+        """Optimize using Black-Litterman with DCF valuations as views.
+        
+        Now uses Monte Carlo probabilities as confidence weights and filters by conviction.
+        """
         try:
             if self.prices is None:
                 self._last_error = "No price data"
                 return None
-            if self.expected_returns is None and not self.calculate_expected_returns():
-                return None
-            if self.cov_matrix is None and not self.calculate_covariance_matrix():
-                return None
 
-            # Filter to only stocks with valid DCF results (positive values)
-            viewdict = {t: dcf_results[t]['upside_downside'] / 100.0
-                        for t in self.tickers if t in dcf_results 
-                        and dcf_results[t].get('value_per_share', 0) > 0}
+            # Build views with conviction-based filtering FIRST
+            viewdict = {}
+            view_confidences = []
+            viable_tickers = []
+            
+            for ticker in self.tickers:
+                if ticker not in dcf_results:
+                    continue
+                
+                dcf = dcf_results[ticker]
+                
+                # Skip if no positive value
+                if dcf.get('value_per_share', 0) <= 0:
+                    continue
+                
+                upside = dcf['upside_downside'] / 100.0
+                conviction_data = dcf.get('conviction', {})
+                conviction = conviction_data.get('label', 'N/A')
+                mc_data = dcf.get('monte_carlo', {})
+                mc_probability = mc_data.get('probability', 0) if mc_data else 0
+                
+                # Conviction-based filtering and discounting
+                if conviction == 'HIGH CONVICTION':
+                    viewdict[ticker] = upside
+                    view_confidences.append(0.3 + (mc_probability / 100) * 0.3)
+                    viable_tickers.append(ticker)
+                    
+                elif conviction == 'MODERATE':
+                    viewdict[ticker] = upside
+                    view_confidences.append(0.2 + (mc_probability / 100) * 0.2)
+                    viable_tickers.append(ticker)
+                    
+                elif conviction == 'SPECULATIVE':
+                    viewdict[ticker] = upside * 0.5
+                    view_confidences.append(0.1 + (mc_probability / 100) * 0.1)
+                    viable_tickers.append(ticker)
+                    
+                # HOLD/PASS: Exclude entirely
+            
             if not viewdict:
-                self._last_error = "No valid DCF results with positive values"
+                self._last_error = "No valid DCF results after conviction filtering"
                 return None
+            
+            # Filter prices to viable tickers only and recalculate matrices
+            filtered_prices = self.prices[viable_tickers]
+            
+            # Recalculate expected returns and covariance for filtered tickers
+            mu = expected_returns.capm_return(filtered_prices, risk_free_rate=self.risk_free_rate)
+            S = risk_models.CovarianceShrinkage(filtered_prices).ledoit_wolf()
 
+            # Get market caps for Black-Litterman
             market_caps = pd.Series({t: dcf_results.get(t, {}).get('market_cap', 1.0)
                                      for t in viewdict.keys()})
-            confidences = np.full(len(viewdict), confidence)
+            
+            # Convert to numpy array
+            confidences_array = np.array(view_confidences)
 
             bl = black_litterman.BlackLittermanModel(
-                self.cov_matrix, pi="market", market_caps=market_caps,
-                absolute_views=viewdict, omega="idzorek", view_confidences=confidences
+                S, pi="market", market_caps=market_caps,
+                absolute_views=viewdict, omega="idzorek", view_confidences=confidences_array
             )
             bl_returns = bl.bl_returns()
 
-            ef = EfficientFrontier(bl_returns, self.cov_matrix, weight_bounds=weight_bounds)
+            ef = EfficientFrontier(bl_returns, S, weight_bounds=weight_bounds)
             try:
                 if method == OptimizationMethod.MAX_SHARPE:
                     ef.max_sharpe(risk_free_rate=self.risk_free_rate)
@@ -232,7 +276,7 @@ class PortfolioEngine:
                     ef.efficient_risk(target_volatility=0.15)
             except ValueError:
                 # If all returns are below risk-free rate, fall back to min volatility
-                ef = EfficientFrontier(bl_returns, self.cov_matrix, weight_bounds=weight_bounds)
+                ef = EfficientFrontier(bl_returns, S, weight_bounds=weight_bounds)
                 ef.min_volatility()
 
             weights = {k: v for k, v in ef.clean_weights().items() if v > 0.001}
