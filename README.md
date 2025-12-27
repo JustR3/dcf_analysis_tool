@@ -32,8 +32,14 @@ The Quant Portfolio Manager implements a systematic approach to quantitative inv
 - **Factor Contributions**: Transparent scoring showing each factor's impact on final rank
 - **CLI Verification**: Interactive command-line tool for on-demand stock audits
 
-### 🎯 Portfolio Construction (Legacy System)
-- **Black-Litterman Optimization**: Bayesian portfolio allocation with market equilibrium
+### 🎯 Portfolio Construction
+- **Factor-Based Black-Litterman**: Systematic portfolio optimization using factor scores as views
+- **Confidence Weighting**: View certainty based on factor agreement (low std = high confidence)
+- **View Generation**: Z-scores converted to implied excess returns
+- **Discrete Allocation**: Integer share quantities with leftover tracking
+- **Multiple Objectives**: Max Sharpe, Min Volatility, Max Quadratic Utility
+
+### 💼 Legacy DCF System
 - **DCF Valuation**: Fundamental analysis with Monte Carlo simulation
 - **Risk Metrics**: VaR, CVaR, Sortino Ratio, Calmar Ratio, Max Drawdown
 - **Market Regime Detection**: Adaptive allocation based on market conditions
@@ -57,8 +63,8 @@ python main.py verify NVDA
 # Example 2: Compare a stock against custom universe
 python main.py verify TSLA --universe NVDA XOM JPM PFE TSLA
 
-# Example 3: Traditional DCF valuation (Legacy Phase 3)
-python main.py val AAPL --detailed
+# Example 3: Run full pipeline (Factor Engine → Portfolio Optimizer)
+python test_full_pipeline.py
 ```
 
 ## 📖 Factor Methodology
@@ -90,6 +96,29 @@ All factors are standardized using Z-scores for fair comparison:
 Final ranking combines all three factors:
 - **Total Score** = 0.4 × Value_Z + 0.4 × Quality_Z + 0.2 × Momentum_Z
 - **Rationale**: Equal weight on fundamentals (Value + Quality), lower weight on price action (Momentum)
+
+## 🎯 Portfolio Optimization
+
+The Black-Litterman optimizer converts factor scores into systematic portfolio allocation:
+
+### View Generation
+Factor Z-scores are translated into expected excess returns:
+- **Formula**: `Implied_Return = Z_Score × Volatility × Alpha_Scalar`
+- **Alpha Scalar**: Configurable parameter (default 0.02 = 2% per sigma beat)
+- **Example**: Stock with Total_Score = 1.0, Volatility = 25% → View = +0.50% excess return
+
+### Confidence Calculation
+Confidence is based on factor agreement (standard deviation of Z-scores):
+- **High Confidence (0.8)**: Std Dev < 0.5 (all factors agree)
+- **Medium Confidence (0.4-0.6)**: Std Dev 0.5-1.5 (mixed signals)
+- **Low Confidence (0.2)**: Std Dev > 1.5 (factors disagree)
+
+### Optimization Process
+1. **Prior Returns**: Historical mean returns as market equilibrium
+2. **Views Matrix**: Factor-implied excess returns for each stock
+3. **Omega Matrix**: Idzorek method scales uncertainty by confidence
+4. **Posterior Returns**: Bayesian update combining prior + views
+5. **Optimization**: Max Sharpe / Min Volatility / Max Quadratic Utility
 
 ## 🔍 Verification System
 
@@ -141,21 +170,23 @@ quant-portfolio-manager/
 ├── pyproject.toml                   # Dependencies (uv package manager)
 ├── src/
 │   ├── models/
-│   │   └── factor_engine.py         # Multi-factor stock ranking engine
+│   │   ├── factor_engine.py         # Multi-factor stock ranking engine
+│   │   └── optimizer.py             # Factor-based Black-Litterman optimizer
 │   ├── pipeline/
 │   │   ├── fred_connector.py        # FRED API integration
 │   │   └── damodaran_loader.py      # NYU Stern data loader
 │   └── utils/
 │       └── validation.py            # Data quality checks
-├── modules/                         # Legacy v1.0 system (Phase 3)
+├── modules/                         # Legacy v1.0 system (DCF/Monte Carlo)
 │   ├── valuation/
 │   │   └── dcf.py                   # DCF valuation engine
 │   ├── portfolio/
-│   │   ├── optimizer.py             # Black-Litterman optimizer
+│   │   ├── optimizer.py             # Legacy optimizer
 │   │   └── regime.py                # Market regime detection
 │   └── utils.py                     # Caching and utilities
 ├── tests/
 │   └── test_phase1_integration.py   # Integration tests
+├── test_full_pipeline.py            # End-to-end pipeline test
 └── data/
     └── cache/                       # Data cache (gitignored)
 ```
@@ -174,11 +205,16 @@ quant-portfolio-manager/
 2. **Damodaran Loader**: Parses CSV files from NYU Stern (sector betas, ERP)
 3. **Factor Engine**: Bulk downloads financial statements via yfinance
 4. **Z-Score Calculation**: Statistical normalization across universe
-5. **Audit System**: Stores universe statistics for verification
+5. **View Generation**: Converts Z-scores to Black-Litterman views
+6. **Portfolio Optimization**: Bayesian allocation with confidence weighting
+7. **Discrete Allocation**: Integer share quantities with leftover tracking
 
 ### Key Algorithms
 - **Z-Score Normalization**: `Z = (X - μ) / σ` with ±3σ winsorization
 - **Composite Scoring**: Weighted sum of standardized factors
+- **View Generation**: `Implied_Return = Z_Score × Volatility × Alpha_Scalar`
+- **Confidence Scoring**: Based on factor agreement (std dev of Z-scores)
+- **Black-Litterman**: Bayesian posterior = (Prior + Views weighted by confidence)
 - **Missing Data Handling**: NaN → 0 (neutral score), dropna for statistics
 - **Bulk Data Fetching**: Single yfinance call for entire universe (performance optimization)
 
@@ -203,6 +239,13 @@ Quality Score = 0.5 × ROIC + 0.5 × Gross_Margin
 Momentum = (Price_Current / Price_252_Days_Ago) - 1
 ```
 
+**Black-Litterman View Generation:**
+```
+Implied_Return = Total_Z_Score × Annualized_Volatility × Alpha_Scalar
+Confidence = f(std_dev(Value_Z, Quality_Z, Momentum_Z))
+  where f(x) = 0.8 if x < 0.5, 0.6 if x < 1.0, 0.4 if x < 1.5, else 0.2
+```
+
 ## 📊 Implementation Status
 
 ### ✅ Phase 1: Data Foundation (Complete)
@@ -216,11 +259,18 @@ Momentum = (Price_Current / Price_252_Days_Ago) - 1
 - Glass box verification system with audit reports
 - CLI interface for interactive verification
 
-### ⚠️ Phase 3: Portfolio Construction (Legacy)
-- Black-Litterman optimization (modules/portfolio/)
-- DCF valuation with Monte Carlo (modules/valuation/)
+### ✅ Phase 3: Portfolio Optimizer (Complete)
+- Factor-based Black-Litterman optimization
+- View generation from factor Z-scores
+- Confidence weighting based on factor agreement
+- Max Sharpe / Min Volatility / Max Quadratic Utility objectives
+- Discrete allocation with integer shares
+- Full pipeline integration (Factor Engine → Optimizer)
+
+### 💼 Legacy Systems (Operational)
+- DCF valuation with Monte Carlo simulation
 - Market regime detection
-- Risk metrics (VaR, CVaR, Sortino, Calmar)
+- Comprehensive risk metrics (VaR, CVaR, Sortino, Calmar)
 
 ## 📚 Academic Foundation
 
