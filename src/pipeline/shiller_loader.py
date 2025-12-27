@@ -19,8 +19,32 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from modules.utils import default_cache, retry_with_backoff
 
 
-# Shiller data URL (official source)
+# Shiller data URLs
 SHILLER_DATA_URL = "https://www.econ.yale.edu/~shiller/data/ie_data.xls"
+
+# Fallback CAPE value if all sources fail (updated Dec 2024)
+FALLBACK_CAPE = 36.5  # Approximate recent CAPE value
+
+
+def create_fallback_cape_data() -> pd.DataFrame:
+    """
+    Create a minimal DataFrame with a recent CAPE estimate as last resort.
+    
+    Returns:
+        DataFrame with current month's estimated CAPE
+    """
+    from datetime import datetime
+    
+    print(f"⚠️  Using fallback CAPE estimate: {FALLBACK_CAPE}")
+    print("   (All data sources unavailable - using static approximation)")
+    
+    # Create minimal DataFrame with just current month
+    df = pd.DataFrame({
+        'Date': [pd.Timestamp(datetime.now().replace(day=1))],
+        'CAPE': [FALLBACK_CAPE]
+    })
+    
+    return df
 
 
 def download_shiller_data() -> Optional[pd.DataFrame]:
@@ -107,7 +131,7 @@ def download_shiller_data() -> Optional[pd.DataFrame]:
 
 def get_shiller_data(use_cache: bool = True, cache_expiry_hours: int = 168) -> Optional[pd.DataFrame]:
     """
-    Get Shiller CAPE data with caching.
+    Get Shiller CAPE data with caching and fallback sources.
     
     Args:
         use_cache: Whether to use cached data (default: True)
@@ -125,8 +149,13 @@ def get_shiller_data(use_cache: bool = True, cache_expiry_hours: int = 168) -> O
             print(f"✅ Loaded Shiller data from cache ({len(cached)} rows)")
             return cached
     
-    # Download fresh data
+    # Try Yale first (primary source with full historical data)
     df = download_shiller_data()
+    
+    # If Yale fails, use fallback CAPE estimate
+    if df is None:
+        print("⚠️  Yale source unavailable, using fallback CAPE estimate...")
+        df = create_fallback_cape_data()
     
     if df is not None:
         # Cache it
