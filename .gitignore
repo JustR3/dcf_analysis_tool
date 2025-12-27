@@ -31,6 +31,3 @@ config/secrets.env
 
 # Cache directory
 data/cache/
-
-# Local analysis files (not for GitHub)
-CRITICAL_ANALYSIS.md
