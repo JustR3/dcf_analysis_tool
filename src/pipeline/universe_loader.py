@@ -38,7 +38,7 @@ SP500_TICKERS = [
     
     # Energy
     "XOM", "CVX", "COP", "EOG", "SLB", "MPC", "PSX", "VLO", "OXY", "HAL",
-    "WMB", "KMI", "BKR", "DVN", "FANG", "HES", "TRGP", "EQT", "CTRA", "OVV",
+    "WMB", "KMI", "BKR", "DVN", "FANG", "TRGP", "EQT", "CTRA", "OVV", "APA",
     
     # Industrials
     "UPS", "HON", "UNP", "RTX", "BA", "CAT", "DE", "LMT", "GE", "MMM",
@@ -53,7 +53,7 @@ SP500_TICKERS = [
     "AVB", "EQR", "VICI", "WY", "VTR", "INVH", "ARE", "MAA", "ESS", "BXP",
     
     # Communication Services
-    "DIS", "NFLX", "CMCSA", "T", "VZ", "TMUS", "CHTR", "PARA",
+    "DIS", "NFLX", "CMCSA", "T", "VZ", "TMUS", "CHTR", "GOOG",
     "EA", "WBD", "OMC", "IPG", "NWSA", "MTCH", "FOXA", "LYV", "TTWO", "DISH",
     
     # Utilities
@@ -144,6 +144,7 @@ def _enrich_with_market_caps(df: pd.DataFrame, batch_size: int = 50) -> pd.DataF
     
     tickers = df['ticker'].tolist()
     market_data = {}
+    failed_tickers = []
     
     # Process in batches
     for i in range(0, len(tickers), batch_size):
@@ -159,12 +160,26 @@ def _enrich_with_market_caps(df: pd.DataFrame, batch_size: int = 50) -> pd.DataF
                 ticker_obj = yf.Ticker(ticker)
                 info = ticker_obj.info
                 
-                market_data[ticker] = {
-                    'market_cap': info.get('marketCap', 0),
-                    'sector': info.get('sector', 'Unknown')
-                }
-            except Exception:
+                # Check if we got valid data
+                market_cap = info.get('marketCap', 0)
+                if market_cap and market_cap > 0:
+                    market_data[ticker] = {
+                        'market_cap': market_cap,
+                        'sector': info.get('sector', 'Unknown')
+                    }
+                else:
+                    failed_tickers.append(ticker)
+                    market_data[ticker] = {'market_cap': 0, 'sector': 'Unknown'}
+                    
+            except Exception as e:
+                # Suppress verbose 404 errors - ticker likely delisted/invalid
+                if "404" not in str(e) and "Not Found" not in str(e):
+                    print(f"  ⚠️  Failed to fetch {ticker}: {e}")
+                failed_tickers.append(ticker)
                 market_data[ticker] = {'market_cap': 0, 'sector': 'Unknown'}
+    
+    if failed_tickers:
+        print(f"  ℹ️  Skipped {len(failed_tickers)} invalid/delisted tickers: {', '.join(failed_tickers[:5])}{'...' if len(failed_tickers) > 5 else ''}")
     
     # Update DataFrame
     df['market_cap'] = df['ticker'].map(lambda t: market_data.get(t, {}).get('market_cap', 0))
