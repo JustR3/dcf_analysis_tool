@@ -32,6 +32,21 @@ class AppConfig:
     FACTOR_ALPHA_SCALAR: float = 0.02  # 1-sigma factor beat = 2% outperformance
     FACTOR_VIEW_TAU: float = 0.025  # Uncertainty in prior (Black-Litterman tau parameter)
     
+    # Macro God: Shiller CAPE Configuration
+    ENABLE_MACRO_ADJUSTMENT: bool = True  # Enable/disable CAPE-based adjustments
+    CAPE_LOW_THRESHOLD: float = 15.0  # CAPE below this = cheap market
+    CAPE_HIGH_THRESHOLD: float = 35.0  # CAPE above this = expensive market
+    CAPE_SCALAR_LOW: float = 1.2  # Return multiplier when market is cheap (+20%)
+    CAPE_SCALAR_HIGH: float = 0.7  # Return multiplier when market is expensive (-30%)
+    CAPE_CACHE_HOURS: int = 168  # Cache CAPE data for 1 week
+    
+    # Factor God: Fama-French Configuration
+    ENABLE_FACTOR_REGIMES: bool = True  # Enable/disable FF factor regime adjustments
+    FF_FACTOR_SET: str = "3factor"  # "3factor" or "5factor"
+    FF_REGIME_WINDOW: int = 12  # Rolling window in months for regime detection
+    FF_CACHE_HOURS: int = 168  # Cache FF data for 1 week
+    FF_TILT_STRENGTH: float = 0.5  # How much to adjust factor weights (0=none, 1=full)
+    
     # Conviction Rating Thresholds
     CONVICTION_UPSIDE_THRESHOLD: float = 15.0  # 15% upside
     CONVICTION_HIGH_PROBABILITY: float = 75.0  # 75% probability

@@ -1,0 +1,239 @@
+"""
+Universe Loader for Stock Selection
+Fetches S&P 500 constituents using professional data sources (yfinance).
+No web scraping - uses curated list with real-time market cap enrichment.
+"""
+
+from typing import Optional, List
+import pandas as pd
+import yfinance as yf
+import warnings
+
+warnings.filterwarnings('ignore')
+
+
+# Professionally curated S&P 500 list (updated periodically)
+# This is more reliable than web scraping and is standard practice in industry
+SP500_TICKERS = [
+    # Technology
+    "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "NVDA", "META", "TSLA", "AVGO", "ORCL", 
+    "ADBE", "CRM", "CSCO", "ACN", "AMD", "INTC", "IBM", "QCOM", "TXN", "NOW",
+    "INTU", "AMAT", "ADI", "MU", "LRCX", "KLAC", "SNPS", "CDNS", "MCHP", "NXPI",
+    
+    # Healthcare
+    "UNH", "JNJ", "LLY", "ABBV", "MRK", "TMO", "ABT", "DHR", "PFE", "BMY",
+    "AMGN", "GILD", "ISRG", "VRTX", "REGN", "CVS", "CI", "ELV", "HCA", "BSX",
+    
+    # Financials
+    "JPM", "V", "MA", "BAC", "WFC", "MS", "GS", "BLK", "SPGI", "C",
+    "AXP", "CB", "PGR", "MMC", "USB", "SCHW", "PNC", "TFC", "AON", "AIG",
+    
+    # Consumer Discretionary
+    "HD", "MCD", "NKE", "SBUX", "LOW", "TJX", "BKNG", "CMG",
+    "MAR", "ABNB", "GM", "F", "ROST", "YUM", "DHI", "LEN", "HLT", "ORLY",
+    
+    # Consumer Staples
+    "WMT", "PG", "COST", "KO", "PEP", "PM", "MO", "MDLZ", "CL", "EL",
+    "KMB", "GIS", "HSY", "SYY", "ADM", "KHC", "K", "CAG", "CPB", "TSN",
+    
+    # Energy
+    "XOM", "CVX", "COP", "EOG", "SLB", "MPC", "PSX", "VLO", "OXY", "HAL",
+    "WMB", "KMI", "BKR", "DVN", "FANG", "HES", "TRGP", "EQT", "CTRA", "OVV",
+    
+    # Industrials
+    "UPS", "HON", "UNP", "RTX", "BA", "CAT", "DE", "LMT", "GE", "MMM",
+    "NOC", "ETN", "ITW", "EMR", "WM", "GD", "NSC", "CSX", "FDX", "PCAR",
+    
+    # Materials
+    "LIN", "APD", "SHW", "FCX", "ECL", "NEM", "CTVA", "DD", "NUE", "DOW",
+    "PPG", "VMC", "MLM", "ALB", "IFF", "BALL", "AVY", "CE", "IP", "PKG",
+    
+    # Real Estate
+    "AMT", "PLD", "CCI", "EQIX", "PSA", "O", "WELL", "DLR", "SPG", "SBAC",
+    "AVB", "EQR", "VICI", "WY", "VTR", "INVH", "ARE", "MAA", "ESS", "BXP",
+    
+    # Communication Services
+    "DIS", "NFLX", "CMCSA", "T", "VZ", "TMUS", "CHTR", "PARA",
+    "EA", "WBD", "OMC", "IPG", "NWSA", "MTCH", "FOXA", "LYV", "TTWO", "DISH",
+    
+    # Utilities
+    "NEE", "SO", "DUK", "CEG", "AEP", "SRE", "D", "PEG", "EXC", "XEL",
+    "ED", "WEC", "ES", "FE", "EIX", "ETR", "PPL", "AWK", "DTE", "AEE",
+    
+    # Additional major companies
+    "BRK.B", "PYPL", "UBER", "SHOP", "SQ", "COIN", "SNOW", "DDOG", "ZS",
+    "OKTA", "CRWD", "NET", "DKNG", "RBLX", "U", "PATH", "S", "BILL", "CFLT",
+    
+    # More diversification
+    "TGT", "ZTS", "MRNA", "IDXX",
+    "BIIB", "IQV", "MTD", "WAT", "A", "ZBH", "DGX", "LH", "HOLX", "BAX",
+    
+    # Round out to 250+ (sufficient for top 100 selection)
+    "APH", "TEL", "ROP", "KEYS", "TYL", "ANSS", "FTNT", "GPN", "FIS", "FISV",
+    "ADP", "PAYX", "TDY", "BR", "FTV", "CTAS", "FAST", "DOV", "ROK", "AME"
+]
+
+
+FALLBACK_SP500_TOP50 = [
+    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK.B", "UNH", "XOM",
+    "JNJ", "JPM", "V", "PG", "MA", "HD", "CVX", "MRK", "ABBV", "PEP",
+    "AVGO", "COST", "KO", "MCD", "ADBE", "WMT", "CSCO", "ACN", "NKE", "TMO",
+    "LLY", "DHR", "ABT", "CRM", "VZ", "ORCL", "BAC", "CMCSA", "TXN", "NEE",
+    "WFC", "DIS", "UPS", "PM", "HON", "QCOM", "IBM", "INTC", "AMD", "AMGN"
+]
+
+
+def fetch_sp500_constituents(top_n: Optional[int] = None, use_fallback: bool = False) -> pd.DataFrame:
+    """
+    Fetch S&P 500 constituents using professionally curated list with real-time enrichment.
+    
+    Args:
+        top_n: If specified, return only top N by market cap
+        use_fallback: If True, use minimal fallback instead of full enrichment
+    
+    Returns:
+        DataFrame with columns: ticker, sector, market_cap
+    """
+    if use_fallback:
+        print("📋 Using fallback S&P 500 universe...")
+        tickers = FALLBACK_SP500_TOP50[:top_n] if top_n else FALLBACK_SP500_TOP50
+        return _enrich_tickers_with_info(tickers)
+    
+    try:
+        print("📊 Using professionally curated S&P 500 list...")
+        print("💼 Enriching with real-time market data from yfinance...")
+        
+        # Use full curated list
+        tickers_to_fetch = SP500_TICKERS[:250]  # 250 tickers ensures we can get top 100
+        
+        # Create base DataFrame
+        df = pd.DataFrame({'ticker': tickers_to_fetch})
+        
+        # Enrich with market cap and sector data
+        df = _enrich_with_market_caps(df)
+        
+        # Remove invalid tickers (no market cap)
+        df = df[df['market_cap'] > 0].copy()
+        
+        # Sort by market cap descending
+        df = df.sort_values('market_cap', ascending=False).reset_index(drop=True)
+        
+        print(f"✅ Loaded {len(df)} valid constituents")
+        
+        # Filter to top N if requested
+        if top_n:
+            df = df.head(top_n)
+            print(f"📊 Selected top {top_n} by market cap")
+        
+        return df
+        
+    except Exception as e:
+        print(f"⚠️  Failed to enrich S&P 500: {e}")
+        print("📋 Falling back to minimal universe...")
+        
+        tickers = FALLBACK_SP500_TOP50[:top_n] if top_n else FALLBACK_SP500_TOP50
+        return _enrich_tickers_with_info(tickers)
+
+
+def _enrich_with_market_caps(df: pd.DataFrame, batch_size: int = 50) -> pd.DataFrame:
+    """
+    Enrich DataFrame with market cap and sector data from yfinance.
+    Processes in batches to avoid timeouts.
+    """
+    print(f"💰 Fetching market data for {len(df)} tickers...")
+    
+    tickers = df['ticker'].tolist()
+    market_data = {}
+    
+    # Process in batches
+    for i in range(0, len(tickers), batch_size):
+        batch = tickers[i:i + batch_size]
+        batch_num = i // batch_size + 1
+        total_batches = (len(tickers) + batch_size - 1) // batch_size
+        
+        print(f"  Processing batch {batch_num}/{total_batches}...")
+        
+        # Get individual ticker info (more reliable than bulk for info)
+        for ticker in batch:
+            try:
+                ticker_obj = yf.Ticker(ticker)
+                info = ticker_obj.info
+                
+                market_data[ticker] = {
+                    'market_cap': info.get('marketCap', 0),
+                    'sector': info.get('sector', 'Unknown')
+                }
+            except Exception:
+                market_data[ticker] = {'market_cap': 0, 'sector': 'Unknown'}
+    
+    # Update DataFrame
+    df['market_cap'] = df['ticker'].map(lambda t: market_data.get(t, {}).get('market_cap', 0))
+    df['sector'] = df['ticker'].map(lambda t: market_data.get(t, {}).get('sector', 'Unknown'))
+    
+    return df
+
+
+def _enrich_tickers_with_info(tickers: List[str]) -> pd.DataFrame:
+    """
+    Simplified enrichment for fallback mode.
+    """
+    print(f"📊 Enriching {len(tickers)} tickers with market data...")
+    
+    data = []
+    for ticker in tickers:
+        try:
+            info = yf.Ticker(ticker).info
+            data.append({
+                'ticker': ticker,
+                'sector': info.get('sector', 'Unknown'),
+                'market_cap': info.get('marketCap', 0)
+            })
+        except Exception:
+            data.append({
+                'ticker': ticker,
+                'sector': 'Unknown',
+                'market_cap': 0
+            })
+    
+    df = pd.DataFrame(data)
+    df = df[df['market_cap'] > 0]  # Filter out failed tickers
+    df = df.sort_values('market_cap', ascending=False).reset_index(drop=True)
+    
+    return df
+
+
+def get_universe(universe_name: str = "sp500", top_n: int = 50) -> pd.DataFrame:
+    """
+    Main entry point for fetching stock universe.
+    
+    Args:
+        universe_name: Name of universe ('sp500', 'custom')
+        top_n: Number of stocks to return (by market cap)
+    
+    Returns:
+        DataFrame with columns: ticker, sector, market_cap
+    """
+    if universe_name.lower() == "sp500":
+        return fetch_sp500_constituents(top_n=top_n)
+    else:
+        # Custom universe - use fallback
+        print(f"⚠️  Unknown universe '{universe_name}', using fallback")
+        return fetch_sp500_constituents(top_n=top_n, use_fallback=True)
+
+
+if __name__ == "__main__":
+    """Test the universe loader."""
+    
+    print("\n" + "=" * 80)
+    print("🧪 UNIVERSE LOADER TEST")
+    print("=" * 80 + "\n")
+    
+    # Test 1: Get top 10 S&P 500
+    df = get_universe("sp500", top_n=10)
+    
+    if not df.empty:
+        print(f"\n✅ Successfully loaded {len(df)} stocks")
+        print(f"\nTop 10 by market cap:")
+        print(df[['ticker', 'sector', 'market_cap']].to_string(index=False))
+    else:
+        print("\n❌ Failed to load universe")

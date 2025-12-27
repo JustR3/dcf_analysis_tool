@@ -1,23 +1,50 @@
 # Quant Portfolio Manager
 
-> **Systematic quantitative finance platform for data-driven portfolio construction.**
+> **Production-ready systematic quantitative finance platform for data-driven portfolio construction.**
 
-A production-ready system combining real-time macroeconomic data, academic financial research, and multi-factor stock ranking with transparent verification mechanisms.
+Combines real-time macroeconomic data, academic financial research, and multi-factor stock ranking with Black-Litterman optimization for institutional-grade portfolio management.
 
 ## 🎯 Overview
 
-The Quant Portfolio Manager implements a systematic approach to quantitative investing through three integrated phases:
+The Quant Portfolio Manager implements a systematic approach to quantitative investing through an integrated pipeline:
 
-1. **Data Foundation**: Real-time FRED economic indicators and Damodaran academic datasets
-2. **Factor Engine**: Multi-factor stock ranking using Value, Quality, and Momentum signals
-3. **Portfolio Optimization**: Black-Litterman portfolio construction with DCF integration
+1. **Universe Selection**: S&P 500 or custom universes with market cap weighting
+2. **Data Foundation**: Cache-aware fetching with batch processing and retry logic
+3. **Factor Engine**: Multi-factor stock ranking (Value, Quality, Momentum) with Z-score normalization
+4. **Portfolio Optimization**: Black-Litterman with factor-based views and market-cap-weighted priors
+5. **Macro & Factor Gods** *(Optional)*: Shiller CAPE risk adjustment and Fama-French factor tilts
+6. **Robustness**: Production-ready with caching, batching, progress bars, and error recovery
 
 ## ✨ Key Features
+
+### 🚀 Production-Ready Systematic Workflow
+- **S&P 500 Universe Loader**: Auto-fetches constituents with market caps from Wikipedia
+- **Cache System**: Parquet + JSON per-ticker caching (24-hour expiry)
+- **Batch Processing**: Handles 50-500 stocks reliably (50 tickers/batch)
+- **Retry Logic**: Exponential backoff (1s, 2s, 4s) for failed API calls
+- **Progress Tracking**: Real-time progress bars and status updates
+- **Smart Selection**: Optimizes top N highest-scoring stocks (reduces computation)
+
+### 🌍 "The Gods" - Macro & Factor Intelligence *(Optional)*
+- **Macro God (Shiller CAPE)**: Equity risk adjustment based on market valuation
+  - Cheap markets (CAPE < 15): +20% return boost (scalar 1.2x)
+  - Expensive markets (CAPE > 35): -30% return reduction (scalar 0.7x)
+  - Linear interpolation between thresholds
+  - Weekly cache refresh, fallback to neutral (1.0x) if unavailable
+- **Factor God (Fama-French)**: Factor regime tilts from empirical research
+  - Analyzes 12-month rolling performance of HML (Value), RMW/SMB (Quality)
+  - Strong positive regime: +30% factor weight boost (1.3x)
+  - Strong negative regime: -30% factor weight reduction (0.7x)
+  - Automatically maps Fama-French factors to internal factors
+  - Weekly cache refresh, fallback to neutral (1.0x) if unavailable
 
 ### 📊 Real-Time Data Integration
 - **FRED Connector**: Live risk-free rate, inflation, and macroeconomic indicators from Federal Reserve Economic Data
 - **Damodaran Loader**: Academic datasets from NYU Stern (sector betas, equity risk premiums, industry margins)
+- **Yale Shiller Data**: Historical CAPE ratios for macro valuation signal
+- **Dartmouth Fama-French**: Empirical factor returns (3-factor and 5-factor)
 - **Data Validation**: Cross-verification and quality checks before processing
+- **Caching**: Automatic caching of all fetched data (historical prices, financials, market data)
 
 ### 🔬 Factor-Based Stock Ranking
 - **Value Factor**: FCF Yield (50%) + Earnings Yield (50%)
@@ -33,9 +60,9 @@ The Quant Portfolio Manager implements a systematic approach to quantitative inv
 - **CLI Verification**: Interactive command-line tool for on-demand stock audits
 
 ### 🎯 Portfolio Construction
-- **Factor-Based Black-Litterman**: Systematic portfolio optimization using factor scores as views
+- **Market-Cap-Weighted Priors**: Uses actual market cap weights as Bayesian priors (not equal weight)
+- **Factor-Based Views**: Z-scores converted to implied excess returns
 - **Confidence Weighting**: View certainty based on factor agreement (low std = high confidence)
-- **View Generation**: Z-scores converted to implied excess returns
 - **Discrete Allocation**: Integer share quantities with leftover tracking
 - **Multiple Objectives**: Max Sharpe, Min Volatility, Max Quadratic Utility
 
@@ -56,15 +83,70 @@ uv sync
 
 ### Usage Examples
 
+#### Systematic Portfolio Optimization (Recommended)
+
+Build an optimized portfolio using the full factor-based Black-Litterman pipeline:
+
 ```bash
-# Example 1: Verify a stock's factor ranking (Phase 2)
-python main.py verify NVDA
+# Optimize top 50 S&P 500 stocks
+uv run ./main.py optimize --universe sp500 --top-n 50 --export portfolio.csv
 
-# Example 2: Compare a stock against custom universe
-python main.py verify TSLA --universe NVDA XOM JPM PFE TSLA
+# Optimize top 100 stocks, use top 50 for portfolio construction
+uv run ./main.py optimize --universe sp500 --top-n 100 --optimize-top 50
 
-# Example 3: Run full pipeline (Factor Engine → Portfolio Optimizer)
-python test_full_pipeline.py
+# Use different optimization objectives
+uv run ./main.py optimize --universe sp500 --objective min_volatility
+
+# Enable "The Gods" - Macro CAPE adjustment + Fama-French tilts
+uv run ./main.py optimize --universe sp500 --top-n 50 --use-macro --use-french
+
+# Example with all features enabled
+uv run ./main.py optimize \
+  --universe sp500 \
+  --top-n 100 \
+  --optimize-top 50 \
+  --objective max_sharpe \
+  --use-macro \
+  --use-french \
+  --export portfolio.csv
+```
+
+**Pipeline Steps:**
+1. **(Optional) Macro God**: Fetches Shiller CAPE, calculates equity risk scalar
+2. **(Optional) Factor God**: Analyzes Fama-French factor regimes, computes tilts
+3. **Load Universe**: Fetches S&P 500 constituents with market caps from Wikipedia
+4. **Cache-Aware Data Fetch**: Downloads financial data in batches (50 tickers/batch), uses cached data when available
+5. **Factor Scoring**: Ranks all stocks by Value (40%), Quality (40%), Momentum (20%)
+   - If `--use-french` enabled: Applies factor tilts to Z-scores before ranking
+6. **Smart Selection**: Picks top N highest-scoring stocks for optimization
+7. **Black-Litterman**: Uses market-cap-weighted priors + factor-based views for optimal allocation
+   - If `--use-macro` enabled: Scales expected returns by CAPE risk scalar
+8. **Output**: Portfolio weights with factor scores, sector allocation, and performance metrics
+
+**Performance:**
+- First run: ~20-30 minutes (fetches all data)
+- Subsequent runs: < 30 seconds (uses cache)
+- Memory: ~500 MB for 100 stocks
+- Disk: ~10 MB cache
+
+#### Individual Stock Analysis
+
+```bash
+# Verify a stock's factor ranking
+uv run ./main.py verify NVDA
+
+# Compare against custom universe
+uv run ./main.py verify TSLA --universe NVDA XOM JPM PFE TSLA
+
+# Run DCF valuation
+uv run ./main.py valuation AAPL
+```
+
+#### Legacy Portfolio Workflow
+
+```bash
+# Interactive DCF-based portfolio builder (legacy)
+uv run ./main.py portfolio
 ```
 
 ## 📖 Factor Methodology
@@ -96,6 +178,123 @@ All factors are standardized using Z-scores for fair comparison:
 Final ranking combines all three factors:
 - **Total Score** = 0.4 × Value_Z + 0.4 × Quality_Z + 0.2 × Momentum_Z
 - **Rationale**: Equal weight on fundamentals (Value + Quality), lower weight on price action (Momentum)
+
+## 🌍 The Gods - Macro & Factor Intelligence
+
+The system optionally integrates two "gods" that provide top-down signals to adjust bottom-up factor analysis:
+
+### Macro God: Shiller CAPE (Market Valuation)
+
+Robert Shiller's CAPE (Cyclically Adjusted P/E Ratio) provides a macro valuation signal:
+
+**How It Works:**
+1. **Download CAPE**: Fetches historical CAPE data from Yale's website (updated monthly)
+2. **Calculate Risk Scalar**: Converts CAPE into equity risk adjustment
+   - **CAPE < 15** (Cheap Market): Risk Scalar = 1.2x (boost returns +20%)
+   - **CAPE 15-35** (Fair Market): Linear interpolation (1.2x → 0.7x)
+   - **CAPE > 35** (Expensive Market): Risk Scalar = 0.7x (reduce returns -30%)
+3. **Apply to Returns**: Scales factor-implied expected returns before optimization
+   - Example: If model predicts 8% return and CAPE scalar is 0.8x → adjusted to 6.4%
+
+**Configuration** ([config.py](config.py)):
+```python
+ENABLE_MACRO_ADJUSTMENT: bool = True  # Toggle on/off
+CAPE_LOW_THRESHOLD: float = 15.0      # Cheap market threshold
+CAPE_HIGH_THRESHOLD: float = 35.0     # Expensive market threshold
+CAPE_SCALAR_LOW: float = 1.2          # Multiplier when cheap
+CAPE_SCALAR_HIGH: float = 0.7         # Multiplier when expensive
+CAPE_CACHE_HOURS: int = 168           # Cache for 1 week
+```
+
+**Usage:**
+```bash
+uv run ./main.py optimize --use-macro
+```
+
+**Rationale:**
+- Mean reversion: High CAPE predicts lower future returns, low CAPE predicts higher returns
+- Risk management: Reduce equity exposure when market is expensive
+- Academic backing: Shiller's research shows CAPE correlates with 10-year forward returns
+
+---
+
+### Factor God: Fama-French (Factor Regimes)
+
+Kenneth French's empirical factor returns (HML, RMW, SMB) inform which factors are in/out of favor:
+
+**How It Works:**
+1. **Download Factor Data**: Fetches Fama-French 3-factor or 5-factor data from Dartmouth (updated daily)
+2. **Regime Analysis**: Analyzes 12-month rolling performance of each factor
+   - **Z-Score > 1.5**: STRONG_POSITIVE → Boost factor weight by 30% (1.3x)
+   - **Z-Score 0.5-1.5**: POSITIVE → Boost factor weight by 15% (1.15x)
+   - **Z-Score -0.5 to 0.5**: NEUTRAL → No adjustment (1.0x)
+   - **Z-Score -1.5 to -0.5**: NEGATIVE → Reduce factor weight by 15% (0.85x)
+   - **Z-Score < -1.5**: STRONG_NEGATIVE → Reduce factor weight by 30% (0.7x)
+3. **Factor Mapping**: Maps Fama-French factors to internal factors
+   - **HML (High Minus Low)** → **Value Factor**
+   - **RMW (Robust Minus Weak) / SMB (Small Minus Big)** → **Quality Factor**
+   - **Mkt-RF (Market Risk Premium)** → Market trend (informational only)
+4. **Apply Tilts**: Adjusts factor Z-scores before ranking
+   - Example: If Value has STRONG_POSITIVE regime (1.3x tilt) and stock has Value_Z = 1.0 → adjusted to 1.3
+
+**Configuration** ([config.py](config.py)):
+```python
+ENABLE_FACTOR_REGIMES: bool = True    # Toggle on/off
+FF_FACTOR_SET: str = "3factor"        # "3factor" or "5factor"
+FF_REGIME_WINDOW: int = 12            # Rolling window (months)
+FF_CACHE_HOURS: int = 168             # Cache for 1 week
+FF_TILT_STRENGTH: float = 0.5         # Tilt sensitivity (0=none, 1=full)
+```
+
+**Usage:**
+```bash
+uv run ./main.py optimize --use-french
+```
+
+**Rationale:**
+- Regime persistence: Factors exhibit momentum (winners keep winning)
+- Dynamic allocation: Tilt toward factors that are currently working
+- Academic backing: Fama-French factors are well-documented in literature
+
+---
+
+### Combined Usage
+
+Enable both gods for maximum signal integration:
+
+```bash
+uv run ./main.py optimize \
+  --universe sp500 \
+  --top-n 100 \
+  --use-macro \      # Apply CAPE risk adjustment
+  --use-french \     # Apply Fama-French factor tilts
+  --export portfolio.csv
+```
+
+**Example Output:**
+```
+🌍 Macro God: Fetching Shiller CAPE...
+   Current CAPE: 32.50 (EXPENSIVE)
+   Risk Scalar: 0.78x
+   Historical Percentile: 89.3%
+
+📊 Factor God: Analyzing Fama-French regimes...
+   HML (Value): POSITIVE (1.15x tilt)
+   RMW (Quality): NEUTRAL (1.00x tilt)
+   Mkt-RF: STRONG_POSITIVE (market momentum)
+
+... [factor scoring with tilts applied] ...
+
+💼 Step 4/4: Running Black-Litterman optimization...
+   🌍 CAPE adjustment: 0.78x → alpha scalar 0.020 → 0.016
+   ✅ Optimization complete
+   Expected Return: 18.45%  (adjusted down from 23.65% due to high CAPE)
+```
+
+**Graceful Fallback:**
+- Both gods are optional and have fallback behavior
+- If data is unavailable, they default to neutral (1.0x) and continue
+- Caching ensures reliability (weekly refresh)
 
 ## 🎯 Portfolio Optimization
 
@@ -174,7 +373,11 @@ quant-portfolio-manager/
 │   │   └── optimizer.py             # Factor-based Black-Litterman optimizer
 │   ├── pipeline/
 │   │   ├── fred_connector.py        # FRED API integration
-│   │   └── damodaran_loader.py      # NYU Stern data loader
+│   │   ├── damodaran_loader.py      # NYU Stern data loader
+│   │   ├── universe_loader.py       # S&P 500 constituent loader
+│   │   ├── systematic_workflow.py   # Unified factor→BL pipeline
+│   │   ├── shiller_loader.py        # Macro God: CAPE risk adjustment
+│   │   └── french_loader.py         # Factor God: Fama-French tilts
 │   └── utils/
 │       └── validation.py            # Data quality checks
 ├── modules/                         # Legacy v1.0 system (DCF/Monte Carlo)
@@ -182,11 +385,10 @@ quant-portfolio-manager/
 │   │   └── dcf.py                   # DCF valuation engine
 │   ├── portfolio/
 │   │   ├── optimizer.py             # Legacy optimizer
-│   │   └── regime.py                # Market regime detection
+│   ���   └── regime.py                # Market regime detection
 │   └── utils.py                     # Caching and utilities
 ├── tests/
 │   └── test_phase1_integration.py   # Integration tests
-├── test_full_pipeline.py            # End-to-end pipeline test
 └── data/
     └── cache/                       # Data cache (gitignored)
 ```

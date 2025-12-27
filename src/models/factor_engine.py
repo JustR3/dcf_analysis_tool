@@ -11,8 +11,22 @@ Ranks stocks based on:
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from typing import List, Dict
+from typing import List, Dict, Optional
 import warnings
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from modules.utils import default_cache, retry_with_backoff
+
+# Try to import tqdm for progress bars
+try:
+    from tqdm import tqdm
+    HAS_TQDM = True
+except ImportError:
+    HAS_TQDM = False
 
 warnings.filterwarnings('ignore')
 
@@ -25,61 +39,134 @@ class FactorEngine:
     and ranks stocks by composite Z-score.
     """
     
-    def __init__(self, tickers: List[str]):
+    def __init__(self, tickers: List[str], batch_size: int = 50, cache_expiry_hours: int = 24):
         """
         Initialize the Factor Engine.
         
         Args:
             tickers: List of stock tickers to analyze
+            batch_size: Number of tickers to process per batch (default: 50)
+            cache_expiry_hours: Cache freshness threshold in hours (default: 24)
         """
         self.tickers = tickers
+        self.batch_size = batch_size
+        self.cache_expiry_hours = cache_expiry_hours
         self.data = {}
         self.factor_scores = None
         self.universe_stats = {}  # Store mean/std for each factor
         self.raw_factors = None  # Store raw factor values for auditing
         
+    def _fetch_ticker_data(self, ticker: str) -> Optional[Dict]:
+        """
+        Fetch data for a single ticker with caching and retry.
+        
+        Args:
+            ticker: Stock ticker
+            
+        Returns:
+            Dictionary with history, financial statements, and info, or None if failed
+        """
+        # Try cache first
+        hist_key = f"history_{ticker}_2y"
+        info_key = f"info_{ticker}"
+        cashflow_key = f"cashflow_{ticker}"
+        income_key = f"income_{ticker}"
+        balance_key = f"balance_{ticker}"
+        
+        # Check if all required data is cached
+        cached_hist = default_cache.get(hist_key, expiry_hours=self.cache_expiry_hours)
+        cached_info = default_cache.get(info_key, expiry_hours=self.cache_expiry_hours)
+        cached_cashflow = default_cache.get(cashflow_key, expiry_hours=self.cache_expiry_hours)
+        cached_income = default_cache.get(income_key, expiry_hours=self.cache_expiry_hours)
+        cached_balance = default_cache.get(balance_key, expiry_hours=self.cache_expiry_hours)
+        
+        if all([cached_hist is not None, cached_info is not None, 
+                cached_cashflow is not None, cached_income is not None, 
+                cached_balance is not None]):
+            # Full cache hit
+            return {
+                'history': cached_hist,
+                'info': cached_info,
+                'cash_flow': cached_cashflow,
+                'income_stmt': cached_income,
+                'balance_sheet': cached_balance
+            }
+        
+        # Cache miss - fetch from API with retry
+        def fetch():
+            stock = yf.Ticker(ticker)
+            
+            hist = stock.history(period='2y') if cached_hist is None else cached_hist
+            info = stock.info if cached_info is None else cached_info
+            cash_flow = stock.cashflow if cached_cashflow is None else cached_cashflow
+            income_stmt = stock.income_stmt if cached_income is None else cached_income
+            balance_sheet = stock.balance_sheet if cached_balance is None else cached_balance
+            
+            # Validate we got some data
+            if hist is None or hist.empty:
+                return None
+            
+            return {
+                'history': hist,
+                'info': info,
+                'cash_flow': cash_flow,
+                'income_stmt': income_stmt,
+                'balance_sheet': balance_sheet
+            }
+        
+        result = retry_with_backoff(fetch, max_attempts=3)
+        
+        if result:
+            # Update cache
+            if cached_hist is None:
+                default_cache.set(hist_key, result['history'])
+            if cached_info is None:
+                default_cache.set(info_key, result['info'])
+            if cached_cashflow is None:
+                default_cache.set(cashflow_key, result['cash_flow'])
+            if cached_income is None:
+                default_cache.set(income_key, result['income_stmt'])
+            if cached_balance is None:
+                default_cache.set(balance_key, result['balance_sheet'])
+        
+        return result
+        
     def fetch_data(self) -> None:
         """
-        Bulk download all required data for the ticker universe.
-        Downloads: Price history, income statement, balance sheet, cash flow.
+        Fetch all required data for the ticker universe.
+        Uses caching and batch processing for reliability and speed.
         """
-        print(f"📊 Fetching data for {len(self.tickers)} tickers...")
+        print(f"📊 Fetching data for {len(self.tickers)} tickers (batch size: {self.batch_size})...")
         
-        # Bulk download price history (much faster than individual downloads)
-        try:
-            tickers_obj = yf.Tickers(' '.join(self.tickers))
+        # Process in batches
+        batches = [self.tickers[i:i + self.batch_size] 
+                   for i in range(0, len(self.tickers), self.batch_size)]
+        
+        total_batches = len(batches)
+        successful = 0
+        failed = 0
+        
+        # Use tqdm if available
+        batch_iterator = tqdm(enumerate(batches, 1), total=total_batches, desc="Batches") if HAS_TQDM else enumerate(batches, 1)
+        
+        for batch_num, batch in batch_iterator:
+            if not HAS_TQDM:
+                print(f"  Processing batch {batch_num}/{total_batches} ({len(batch)} tickers)...")
             
-            for ticker in self.tickers:
-                try:
-                    stock = tickers_obj.tickers[ticker]
-                    
-                    # Get price history (2 years for momentum calculation)
-                    hist = stock.history(period='2y')
-                    
-                    # Get financial statements
-                    income_stmt = stock.income_stmt
-                    balance_sheet = stock.balance_sheet
-                    cash_flow = stock.cashflow
-                    
-                    # Get current market cap and price
-                    info = stock.info
-                    
-                    self.data[ticker] = {
-                        'history': hist,
-                        'income_stmt': income_stmt,
-                        'balance_sheet': balance_sheet,
-                        'cash_flow': cash_flow,
-                        'info': info
-                    }
-                    
-                except Exception as e:
-                    print(f"  ⚠️  Failed to fetch {ticker}: {e}")
+            # Process each ticker in the batch
+            for ticker in batch:
+                data = self._fetch_ticker_data(ticker)
+                
+                if data:
+                    self.data[ticker] = data
+                    successful += 1
+                else:
                     self.data[ticker] = None
-                    
-        except Exception as e:
-            print(f"❌ Bulk download failed: {e}")
-            
-        print(f"✅ Data fetched for {len([v for v in self.data.values() if v is not None])} tickers\n")
+                    failed += 1
+                    if not HAS_TQDM:
+                        print(f"    ⚠️  Failed to fetch {ticker}")
+        
+        print(f"\n✅ Data fetched: {successful} successful, {failed} failed\n")
     
     def calculate_value_factor(self, ticker: str) -> float:
         """

@@ -9,9 +9,11 @@ import time
 from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, TypeVar
 
 import pandas as pd
+
+T = TypeVar('T')
 
 
 class RateLimiter:
@@ -210,3 +212,43 @@ rate_limiter = RateLimiter(calls_per_minute=60)
 
 # Global cache instance
 default_cache = DataCache(cache_dir="data/cache", default_expiry_hours=24)
+
+
+def retry_with_backoff(
+    func: Callable[..., T],
+    max_attempts: int = 3,
+    initial_delay: float = 1.0,
+    backoff_factor: float = 2.0,
+    exceptions: tuple = (Exception,)
+) -> Optional[T]:
+    """
+    Retry a function with exponential backoff.
+    
+    Args:
+        func: Function to retry
+        max_attempts: Maximum number of attempts (default: 3)
+        initial_delay: Initial delay in seconds (default: 1.0)
+        backoff_factor: Multiplier for delay on each retry (default: 2.0)
+        exceptions: Tuple of exceptions to catch (default: all Exception)
+    
+    Returns:
+        Function result or None if all attempts failed
+    
+    Example:
+        result = retry_with_backoff(lambda: yf.Ticker('AAPL').info)
+    """
+    delay = initial_delay
+    
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return func()
+        except exceptions as e:
+            if attempt == max_attempts:
+                # Final attempt failed
+                return None
+            
+            # Wait before retry
+            time.sleep(delay)
+            delay *= backoff_factor
+    
+    return None

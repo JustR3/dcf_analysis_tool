@@ -27,6 +27,7 @@ from config import config
 from modules.valuation import DCFEngine
 from modules.portfolio import PortfolioEngine, OptimizationMethod, optimize_portfolio_with_dcf, RegimeDetector
 from src.models.factor_engine import FactorEngine
+from src.pipeline.systematic_workflow import run_systematic_portfolio, display_portfolio_summary
 
 # Styling
 custom_style = Style([
@@ -798,28 +799,86 @@ def export_csv(comparison: dict, filename: str):
 # =============================================================================
 
 def parse_args():
-    parser = argparse.ArgumentParser(prog="qpm", description="Quant Portfolio Manager")
-    sub = parser.add_subparsers(dest="module")
+    parser = argparse.ArgumentParser(
+        prog="qpm", 
+        description="Quant Portfolio Manager - Professional quantitative analysis toolkit",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  qpm valuation AAPL              Run DCF valuation for Apple
+  qpm valuation AAPL MSFT -c      Compare two stocks
+  qpm optimize --universe sp500 --top-n 50     Build systematic portfolio
+  qpm optimize --use-macro --use-french        Enable macro & factor gods
+  qpm verify NVDA                              Verify stock ranking
+        """
+    )
+    sub = parser.add_subparsers(
+        dest="module",
+        title="commands",
+        metavar="COMMAND",
+        description="Available analysis commands (use 'qpm COMMAND -h' for detailed help)"
+    )
     
-    val = sub.add_parser("valuation", aliases=["val", "dcf"], help="DCF Valuation")
-    val.add_argument("tickers", nargs="*", help="Ticker(s)")
-    val.add_argument("-g", "--growth", type=float, help="Growth rate")
-    val.add_argument("-t", "--terminal-growth", type=float, default=2.5, help="Terminal growth rate")
-    val.add_argument("-w", "--wacc", type=float, help="WACC rate")
-    val.add_argument("-y", "--years", type=int, default=5, help="Forecast years")
-    val.add_argument("-s", "--scenarios", action="store_true", help="Scenario analysis")
-    val.add_argument("--sensitivity", action="store_true", help="Sensitivity analysis")
-    val.add_argument("--stress", action="store_true", help="Stress test heatmap")
-    val.add_argument("-c", "--compare", action="store_true", help="Compare stocks")
-    val.add_argument("-d", "--detailed", action="store_true", help="Show detailed technical breakdown")
-    val.add_argument("-e", "--export", type=str, help="Export CSV")
+    # Valuation command
+    val = sub.add_parser(
+        "valuation", 
+        aliases=["val", "dcf"], 
+        help="Run DCF (Discounted Cash Flow) valuation analysis",
+        description="Perform intrinsic value analysis using DCF methodology with Monte Carlo simulation"
+    )
+    val.add_argument("tickers", nargs="*", help="One or more ticker symbols (e.g., AAPL MSFT)")
+    val.add_argument("-g", "--growth", type=float, help="Revenue growth rate override (%%)")
+    val.add_argument("-t", "--terminal-growth", type=float, default=2.5, help="Terminal growth rate (default: 2.5%%)")
+    val.add_argument("-w", "--wacc", type=float, help="Weighted average cost of capital override (%%)")
+    val.add_argument("-y", "--years", type=int, default=5, help="Forecast period in years (default: 5)")
+    val.add_argument("-s", "--scenarios", action="store_true", help="Run scenario analysis (bull/base/bear)")
+    val.add_argument("--sensitivity", action="store_true", help="Run sensitivity analysis across parameter ranges")
+    val.add_argument("--stress", action="store_true", help="Run stress test with heatmap visualization")
+    val.add_argument("-c", "--compare", action="store_true", help="Compare multiple stocks side-by-side")
+    val.add_argument("-d", "--detailed", action="store_true", help="Show detailed technical breakdown of calculations")
+    val.add_argument("-e", "--export", type=str, metavar="FILE", help="Export results to CSV file")
     
-    sub.add_parser("portfolio", aliases=["port", "opt"], help="Portfolio Optimization")
+    # Optimize command (NEW - systematic factor-based Black-Litterman)
+    opt = sub.add_parser(
+        "optimize",
+        aliases=["opt"],
+        help="Systematic portfolio optimization using factor-based Black-Litterman",
+        description="Build optimized portfolios using multi-factor stock ranking and Black-Litterman allocation"
+    )
+    opt.add_argument("--universe", type=str, default="sp500", choices=["sp500", "custom"],
+                     help="Stock universe to use (default: sp500)")
+    opt.add_argument("--top-n", type=int, default=50, metavar="N",
+                     help="Number of top stocks by market cap to analyze (default: 50)")
+    opt.add_argument("--optimize-top", type=int, default=None, metavar="N",
+                     help="Number of top-ranked stocks to include in optimization (default: same as --top-n)")
+    opt.add_argument("--objective", type=str, default="max_sharpe",
+                     choices=["max_sharpe", "min_volatility", "max_quadratic_utility"],
+                     help="Optimization objective (default: max_sharpe)")
+    opt.add_argument("--use-macro", action="store_true",
+                     help="Apply Shiller CAPE-based equity risk adjustment (Macro God)")
+    opt.add_argument("--use-french", action="store_true",
+                     help="Apply Fama-French factor regime tilts (Factor God)")
+    opt.add_argument("--export", type=str, metavar="FILE",
+                     help="Export portfolio weights to CSV file")
+    opt.add_argument("--batch-size", type=int, default=50,
+                     help="Batch size for data fetching (default: 50)")
     
-    # New: Factor Engine verify command
-    verify = sub.add_parser("verify", help="Factor Engine: Verify/audit a stock's ranking")
-    verify.add_argument("ticker", help="Ticker symbol to verify")
-    verify.add_argument("--universe", nargs="+", help="Universe of tickers for comparison (default: mini-universe)")
+    # Portfolio command (LEGACY - kept for backward compatibility with DCF-based workflow)
+    sub.add_parser(
+        "portfolio", 
+        aliases=["port"], 
+        help="[LEGACY] Portfolio optimization using DCF views (interactive)",
+        description="Legacy portfolio builder using DCF intrinsic values as Black-Litterman views"
+    )
+    
+    # Verify command
+    verify = sub.add_parser(
+        "verify", 
+        help="Audit and verify stock rankings using multi-factor model",
+        description="Analyze a stock's quantitative ranking across value, quality, and momentum factors"
+    )
+    verify.add_argument("ticker", help="Ticker symbol to verify and analyze")
+    verify.add_argument("--universe", nargs="+", metavar="TICKER", help="Custom universe of tickers for comparison (default: predefined mini-universe)")
     
     return parser.parse_args()
 
@@ -831,7 +890,89 @@ def main():
         run_interactive_menu()
         return
     
-    if args.module in ("portfolio", "port", "opt"):
+    # NEW: Systematic optimize command
+    if args.module in ("optimize", "opt"):
+        print_header("Systematic Portfolio Optimization")
+        
+        try:
+            # Run the systematic workflow
+            results = run_systematic_portfolio(
+                universe_name=args.universe,
+                top_n=args.top_n,
+                top_n_for_optimization=args.optimize_top,
+                objective=args.objective,
+                batch_size=args.batch_size,
+                use_macro_adjustment=args.use_macro,
+                use_factor_regimes=args.use_french
+            )
+            
+            # Display results
+            if HAS_RICH and console:
+                # Use rich table for better display
+                weights_df = results['weights_df']
+                
+                table = Table(title="Portfolio Weights", box=box.ROUNDED, show_lines=True)
+                table.add_column("Rank", justify="center", style="cyan")
+                table.add_column("Ticker", style="bold")
+                table.add_column("Weight", justify="right", style="green")
+                table.add_column("Score", justify="right")
+                table.add_column("Sector", style="dim")
+                
+                for idx, row in weights_df.head(15).iterrows():
+                    table.add_row(
+                        str(idx + 1),
+                        row['ticker'],
+                        f"{row['weight']*100:.2f}%",
+                        f"{row['total_score']:.3f}",
+                        row.get('sector', 'N/A')
+                    )
+                
+                console.print("\n")
+                console.print(table)
+                
+                # Performance metrics panel
+                opt_result = results['optimization_result']
+                metrics_text = (
+                    f"[green]Expected Return:[/green] {opt_result.expected_return*100:.2f}%\n"
+                    f"[yellow]Volatility:[/yellow] {opt_result.volatility*100:.2f}%\n"
+                    f"[cyan]Sharpe Ratio:[/cyan] {opt_result.sharpe_ratio:.2f}\n"
+                    f"[dim]Positions:[/dim] {len(weights_df)}"
+                )
+                
+                # Add macro/factor adjustments if enabled
+                if results.get('macro_adjustment'):
+                    cape_data = results['macro_adjustment']
+                    metrics_text += f"\n\n[bold cyan]Macro Adjustment:[/bold cyan]\n"
+                    metrics_text += f"  CAPE: {cape_data['current_cape']:.2f} ({cape_data['regime']})\n"
+                    metrics_text += f"  Risk Scalar: {cape_data['risk_scalar']:.2f}x"
+                
+                if results.get('factor_tilts'):
+                    tilt_data = results['factor_tilts']
+                    metrics_text += f"\n\n[bold cyan]Factor Tilts:[/bold cyan]\n"
+                    metrics_text += f"  Value: {tilt_data['value_tilt']:.2f}x\n"
+                    metrics_text += f"  Quality: {tilt_data['quality_tilt']:.2f}x\n"
+                    metrics_text += f"  Momentum: {tilt_data['momentum_tilt']:.2f}x"
+                
+                console.print(Panel(metrics_text, title="Performance Metrics", box=box.DOUBLE))
+                
+            else:
+                # Fallback to simple display
+                display_portfolio_summary(results)
+            
+            # Export if requested
+            if args.export:
+                results['weights_df'].to_csv(args.export, index=False)
+                print_msg(f"Portfolio weights exported to {args.export}", "success")
+        
+        except Exception as e:
+            print_msg(f"Error: {e}", "error")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+        
+        return
+    
+    if args.module in ("portfolio", "port"):
         run_portfolio_interactive()
         return
     
