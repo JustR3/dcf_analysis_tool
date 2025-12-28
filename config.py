@@ -29,7 +29,7 @@ class AppConfig:
     DEFAULT_RISK_FREE_RATE: float = 0.04  # 4% for Sharpe ratio
     
     # Factor-Based Black-Litterman
-    FACTOR_ALPHA_SCALAR: float = 0.02  # 1-sigma factor beat = 2% outperformance
+    FACTOR_ALPHA_SCALAR: float = 0.05  # 1-sigma factor beat = 5% outperformance (increased from 0.02)
     FACTOR_VIEW_TAU: float = 0.025  # Uncertainty in prior (Black-Litterman tau parameter)
     
     # Macro God: Shiller CAPE Configuration

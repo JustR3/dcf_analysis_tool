@@ -20,6 +20,7 @@ except ImportError:
 
 from src.models.factor_engine import FactorEngine
 from src.pipeline.systematic_workflow import run_systematic_portfolio, display_portfolio_summary
+from config import AppConfig
 
 console = Console() if HAS_RICH else None
 
@@ -128,6 +129,7 @@ def main():
                 top_n_for_optimization=args.optimize_top,
                 objective=args.objective,
                 batch_size=args.batch_size,
+                factor_alpha_scalar=AppConfig.FACTOR_ALPHA_SCALAR,
                 use_macro_adjustment=args.use_macro,
                 use_factor_regimes=args.use_french
             )

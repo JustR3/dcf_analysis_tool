@@ -49,7 +49,8 @@ class BlackLittermanOptimizer:
         tickers: list,
         risk_free_rate: float = 0.04,
         factor_alpha_scalar: float = 0.02,
-        market_cap_weights: Optional[Dict[str, float]] = None
+        market_cap_weights: Optional[Dict[str, float]] = None,
+        macro_return_scalar: float = 1.0
     ):
         """
         Initialize the optimizer.
@@ -60,11 +61,13 @@ class BlackLittermanOptimizer:
             factor_alpha_scalar: Scaling factor for Z-score to return conversion
                                (e.g., 0.02 means 1-sigma beat = 2% outperformance)
             market_cap_weights: Prior market cap weights (if None, uses equal weight)
+            macro_return_scalar: Macro adjustment to equilibrium returns (e.g., 0.7 for expensive markets)
         """
         self.tickers = tickers
         self.risk_free_rate = risk_free_rate
         self.factor_alpha_scalar = factor_alpha_scalar
         self.market_cap_weights = market_cap_weights or self._get_equal_weights()
+        self.macro_return_scalar = macro_return_scalar
         
         # Data containers
         self.prices = None
@@ -232,6 +235,12 @@ class BlackLittermanOptimizer:
         # Calculate market-implied prior returns using CAPM
         # Use historical returns as a starting point
         market_returns = expected_returns.mean_historical_return(self.prices)
+        
+        # Apply macro adjustment to equilibrium returns (not to factor confidence)
+        # This separates "market is expensive" from "factors don't work"
+        if self.macro_return_scalar != 1.0:
+            print(f"  📉 Applying macro adjustment: {self.macro_return_scalar:.2f}x to equilibrium returns")
+            market_returns = market_returns * self.macro_return_scalar
         
         # Convert views dictionary to series aligned with tickers
         viewdict = {ticker: self.views.get(ticker, 0) for ticker in self.tickers}

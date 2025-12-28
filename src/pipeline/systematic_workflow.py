@@ -26,7 +26,7 @@ def run_systematic_portfolio(
     top_n: int = 50,
     top_n_for_optimization: Optional[int] = None,
     risk_free_rate: float = 0.04,
-    factor_alpha_scalar: float = 0.02,
+    factor_alpha_scalar: float = 0.05,  # Updated from 0.02 to 0.05
     objective: str = 'max_sharpe',
     weight_bounds: Tuple[float, float] = (0.0, 0.30),
     batch_size: int = 50,
@@ -205,19 +205,22 @@ def run_systematic_portfolio(
         for _, row in selected_universe.iterrows()
     }
     
-    # Adjust factor_alpha_scalar by CAPE if macro adjustment is enabled
-    adjusted_alpha_scalar = factor_alpha_scalar
+    # Determine macro return scalar (CAPE adjustment to equilibrium returns)
+    # This is separate from factor confidence - we can believe factors work
+    # while believing the overall market is expensive
+    macro_return_scalar = 1.0
     if use_macro_adjustment and macro_adjustment:
-        adjusted_alpha_scalar = factor_alpha_scalar * macro_adjustment['risk_scalar']
-        print(f"   🌍 CAPE adjustment: {macro_adjustment['risk_scalar']:.2f}x → "
-              f"alpha scalar {factor_alpha_scalar:.3f} → {adjusted_alpha_scalar:.3f}")
+        macro_return_scalar = macro_adjustment['risk_scalar']
+        print(f"   🌍 CAPE adjustment: {macro_return_scalar:.2f}x to equilibrium returns")
+        print(f"      (Factor confidence unchanged at {factor_alpha_scalar:.3f})")
     
     # Initialize optimizer with market-cap-weighted priors
     optimizer = BlackLittermanOptimizer(
         tickers=selected_tickers,
         risk_free_rate=risk_free_rate,
-        factor_alpha_scalar=adjusted_alpha_scalar,
-        market_cap_weights=market_cap_weights
+        factor_alpha_scalar=factor_alpha_scalar,  # Keep factor confidence unchanged
+        market_cap_weights=market_cap_weights,
+        macro_return_scalar=macro_return_scalar   # Apply macro view to priors
     )
     
     # Fetch price data (will use cache if available)
