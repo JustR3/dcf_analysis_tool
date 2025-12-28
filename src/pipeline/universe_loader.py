@@ -66,7 +66,7 @@ SP500_TICKERS = [
     "AVB", "EQR", "VICI", "WY", "VTR", "INVH", "ARE", "MAA", "ESS", "BXP",
     
     # Communication Services
-    "DIS", "NFLX", "CMCSA", "T", "VZ", "TMUS", "CHTR", "GOOG",
+    "DIS", "NFLX", "CMCSA", "T", "VZ", "TMUS", "CHTR",
     "EA", "WBD", "OMC", "IPG", "NWSA", "MTCH", "FOXA", "LYV", "TTWO", "SATS",
     
     # Utilities
@@ -88,7 +88,7 @@ SP500_TICKERS = [
 
 
 FALLBACK_SP500_TOP50 = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK-B", "UNH", "XOM",
+    "AAPL", "MSFT", "AMZN", "NVDA", "META", "TSLA", "BRK-B", "UNH", "XOM",
     "JNJ", "JPM", "V", "PG", "MA", "HD", "CVX", "MRK", "ABBV", "PEP",
     "AVGO", "COST", "KO", "MCD", "ADBE", "WMT", "CSCO", "ACN", "NKE", "TMO",
     "LLY", "DHR", "ABT", "CRM", "VZ", "ORCL", "BAC", "CMCSA", "TXN", "NEE",

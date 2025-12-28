@@ -167,7 +167,7 @@ uv run ./main.py verify TSLA --universe NVDA XOM JPM PFE TSLA
 uv run python dcf_cli.py valuation AAPL --detailed
 
 # Build DCF-based portfolio (conviction-weighted)
-uv run python dcf_cli.py portfolio --tickers AAPL MSFT GOOGL NVDA
+uv run python dcf_cli.py portfolio --tickers AAPL MSFT GOOG NVDA
 
 # Interactive DCF portfolio builder
 uv run python dcf_cli.py portfolio --interactive

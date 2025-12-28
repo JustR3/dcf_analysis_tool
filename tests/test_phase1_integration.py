@@ -183,7 +183,7 @@ class TestDataValidator:
     def test_validate_multiple_tickers(self):
         """Test validation for multiple tickers."""
         validator = DataValidator()
-        tickers = ["AAPL", "MSFT", "GOOGL"]
+        tickers = ["AAPL", "MSFT", "GOOG"]
         
         results = {}
         for ticker in tickers:

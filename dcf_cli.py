@@ -623,7 +623,7 @@ def run_portfolio_interactive():
     """Interactive portfolio optimization."""
     print_header("DCF-Based Portfolio Optimization")
     
-    default = "AAPL,MSFT,GOOGL,NVDA"
+    default = "AAPL,MSFT,GOOG,NVDA"
     if HAS_QUESTIONARY:
         tickers_input = questionary.text(f"Tickers (comma-separated) [{default}]:", default=default, style=custom_style).ask()
     else:

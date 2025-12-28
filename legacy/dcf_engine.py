@@ -273,14 +273,14 @@ class DCFEngine:
                 'Consumer Electronics': ['AAPL', 'SONY', 'DELL'],
                 
                 # Internet/Social Media
-                'Internet Content & Information': ['GOOGL', 'META', 'NFLX', 'DIS'],
+                'Internet Content & Information': ['GOOG', 'META', 'NFLX', 'DIS'],
                 
                 # Sector-level fallbacks
                 'Consumer Cyclical': ['AMZN', 'HD', 'NKE', 'MCD', 'SBUX', 'TSLA', 'F', 'GM'],
-                'Technology': ['AAPL', 'MSFT', 'GOOGL', 'META', 'NVDA'],
+                'Technology': ['AAPL', 'MSFT', 'GOOG', 'META', 'NVDA'],
                 'Healthcare': ['UNH', 'JNJ', 'PFE', 'ABBV', 'LLY'],
                 'Financial Services': ['JPM', 'BAC', 'WFC', 'C', 'GS'],
-                'Communication Services': ['GOOGL', 'META', 'DIS', 'NFLX', 'T'],
+                'Communication Services': ['GOOG', 'META', 'DIS', 'NFLX', 'T'],
             }
             
             # Try industry first, then sector

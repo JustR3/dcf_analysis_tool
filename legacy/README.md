@@ -28,7 +28,7 @@ uv run python dcf_cli.py
 uv run python dcf_cli.py valuation AAPL
 
 # Portfolio optimization with DCF views
-uv run python dcf_cli.py portfolio AAPL,MSFT,GOOGL
+uv run python dcf_cli.py portfolio AAPL,MSFT,GOOG
 ```
 
 ### Programmatic Usage
