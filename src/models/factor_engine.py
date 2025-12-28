@@ -11,6 +11,7 @@ Ranks stocks based on:
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import time
 from typing import List, Dict, Optional
 import warnings
 import sys
@@ -20,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from modules.utils import default_cache, retry_with_backoff, thread_safe_rate_limiter
+from modules.utils import default_cache, retry_with_backoff, thread_safe_rate_limiter, Timer
 
 # Try to import tqdm for progress bars
 try:
@@ -140,6 +141,7 @@ class FactorEngine:
         Fetch all required data for the ticker universe.
         Uses caching, batch processing, and parallel execution for speed and reliability.
         """
+        overall_timer_start = time.time()
         print(f"📊 Fetching data for {len(self.tickers)} tickers (batch size: {self.batch_size})...")
         
         # Process in batches
@@ -185,7 +187,9 @@ class FactorEngine:
                         if not HAS_TQDM:
                             print(f"    ⚠️  Error fetching {ticker}: {e}")
         
-        print(f"\n✅ Data fetched: {successful} successful, {failed} failed\n")
+        overall_elapsed = time.time() - overall_timer_start
+        print(f"\n✅ Data fetched: {successful} successful, {failed} failed")
+        print(f"⏱️  Data Fetching - Total: {overall_elapsed:.2f}s\n")
     
     def calculate_value_factor(self, ticker: str) -> float:
         """
@@ -370,6 +374,7 @@ class FactorEngine:
         if not self.data:
             self.fetch_data()
         
+        calc_start = time.time()
         print("🔬 Calculating factor scores...")
         
         # Calculate raw factor values for all tickers
@@ -413,7 +418,9 @@ class FactorEngine:
         # Return simplified view
         output_df = df[['Ticker', 'Value_Z', 'Quality_Z', 'Momentum_Z', 'Total_Score']].copy()
         
-        print("✅ Factor ranking complete!\n")
+        calc_elapsed = time.time() - calc_start
+        print(f"✅ Factor ranking complete!")
+        print(f"⏱️  Factor Calculation - Total: {calc_elapsed:.2f}s\n")
         return output_df
     
     def generate_audit_report(self, ticker: str) -> Dict:

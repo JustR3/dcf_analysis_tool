@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from modules.utils import default_cache, thread_safe_rate_limiter
+from modules.utils import default_cache, thread_safe_rate_limiter, Timer
 
 warnings.filterwarnings('ignore')
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -116,28 +116,31 @@ def fetch_sp500_constituents(top_n: Optional[int] = None, use_fallback: bool = F
         print("📊 Using professionally curated S&P 500 list...")
         print("💼 Enriching with real-time market data from yfinance...")
         
-        # Use full curated list
-        tickers_to_fetch = SP500_TICKERS[:250]  # 250 tickers ensures we can get top 100
+        with Timer("Universe Loading - Total", verbose=False) as timer:
+            # Use full curated list
+            tickers_to_fetch = SP500_TICKERS[:250]  # 250 tickers ensures we can get top 100
+            
+            # Create base DataFrame
+            df = pd.DataFrame({'ticker': tickers_to_fetch})
+            
+            # Enrich with market cap and sector data
+            with Timer("Universe Loading - Market Cap Enrichment"):
+                df = _enrich_with_market_caps(df)
+            
+            # Remove invalid tickers (no market cap)
+            df = df[df['market_cap'] > 0].copy()
+            
+            # Sort by market cap descending
+            df = df.sort_values('market_cap', ascending=False).reset_index(drop=True)
+            
+            print(f"✅ Loaded {len(df)} valid constituents")
+            
+            # Filter to top N if requested
+            if top_n:
+                df = df.head(top_n)
+                print(f"📊 Selected top {top_n} by market cap")
         
-        # Create base DataFrame
-        df = pd.DataFrame({'ticker': tickers_to_fetch})
-        
-        # Enrich with market cap and sector data
-        df = _enrich_with_market_caps(df)
-        
-        # Remove invalid tickers (no market cap)
-        df = df[df['market_cap'] > 0].copy()
-        
-        # Sort by market cap descending
-        df = df.sort_values('market_cap', ascending=False).reset_index(drop=True)
-        
-        print(f"✅ Loaded {len(df)} valid constituents")
-        
-        # Filter to top N if requested
-        if top_n:
-            df = df.head(top_n)
-            print(f"📊 Selected top {top_n} by market cap")
-        
+        print(f"⏱️  Universe Loading - Total: Completed in {timer.elapsed:.2f}s\n")
         return df
         
     except Exception as e:

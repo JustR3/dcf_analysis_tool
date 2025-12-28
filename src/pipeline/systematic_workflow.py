@@ -6,6 +6,7 @@ Optional: Macro adjustments (Shiller CAPE), Factor tilts (Fama-French)
 
 import pandas as pd
 import numpy as np
+import time
 from typing import Dict, Optional, Tuple
 import sys
 from pathlib import Path
@@ -59,6 +60,9 @@ def run_systematic_portfolio(
             - macro_adjustment: CAPE-based risk scalar (if enabled)
             - factor_tilts: Fama-French factor tilts (if enabled)
     """
+    # Start overall pipeline timer
+    pipeline_start = time.time()
+    
     print("\n" + "=" * 90)
     print("🚀 SYSTEMATIC PORTFOLIO WORKFLOW")
     print("=" * 90 + "\n")
@@ -271,6 +275,14 @@ def run_systematic_portfolio(
     # =========================================================================
     # Return Complete Results
     # =========================================================================
+    pipeline_elapsed = time.time() - pipeline_start
+    
+    print("\n" + "=" * 90)
+    print("⏱️  PIPELINE TIMING SUMMARY")
+    print("=" * 90)
+    print(f"  Total Pipeline Execution Time: {pipeline_elapsed:.2f}s ({pipeline_elapsed/60:.2f} minutes)")
+    print("=" * 90 + "\n")
+    
     return {
         'universe': universe_df,
         'factor_scores': factor_scores_full,

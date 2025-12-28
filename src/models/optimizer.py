@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pypfopt import BlackLittermanModel, risk_models, expected_returns
 from pypfopt.efficient_frontier import EfficientFrontier
 from pypfopt.discrete_allocation import DiscreteAllocation
+import time
 
 
 @dataclass
@@ -221,6 +222,7 @@ class BlackLittermanOptimizer:
         if self.views is None:
             raise ValueError("Must generate views first")
         
+        opt_start = time.time()
         print(f"🎯 Optimizing portfolio ({objective})...")
         
         # Calculate sample covariance matrix
@@ -287,10 +289,12 @@ class BlackLittermanOptimizer:
             }
         )
         
-        print(f"✅ Optimization complete!\n")
+        opt_elapsed = time.time() - opt_start
+        print(f"✅ Optimization complete!")
         print(f"  Expected Return: {result.expected_return*100:.2f}%")
         print(f"  Volatility: {result.volatility*100:.2f}%")
-        print(f"  Sharpe Ratio: {result.sharpe_ratio:.2f}\n")
+        print(f"  Sharpe Ratio: {result.sharpe_ratio:.2f}")
+        print(f"⏱️  Portfolio Optimization - Total: {opt_elapsed:.2f}s\n")
         
         return result
     

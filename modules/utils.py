@@ -283,3 +283,49 @@ def retry_with_backoff(
             delay *= backoff_factor
     
     return None
+
+
+class Timer:
+    """Context manager and decorator for timing code execution.
+    
+    Usage as context manager:
+        with Timer("Data fetching"):
+            fetch_data()
+    
+    Usage as decorator:
+        @Timer.decorator("Function name")
+        def my_function():
+            ...
+    """
+    
+    def __init__(self, name: str = "Operation", verbose: bool = True):
+        self.name = name
+        self.verbose = verbose
+        self.start_time = None
+        self.elapsed = None
+    
+    def __enter__(self):
+        self.start_time = time.time()
+        if self.verbose:
+            print(f"⏱️  {self.name}: Starting...")
+        return self
+    
+    def __exit__(self, *args):
+        self.elapsed = time.time() - self.start_time
+        if self.verbose:
+            print(f"⏱️  {self.name}: Completed in {self.elapsed:.2f}s\n")
+    
+    @staticmethod
+    def decorator(name: str = "Function"):
+        """Decorator version of Timer."""
+        def wrapper(func: Callable) -> Callable:
+            @wraps(func)
+            def inner(*args: Any, **kwargs: Any) -> Any:
+                start = time.time()
+                print(f"⏱️  {name}: Starting...")
+                result = func(*args, **kwargs)
+                elapsed = time.time() - start
+                print(f"⏱️  {name}: Completed in {elapsed:.2f}s\n")
+                return result
+            return inner
+        return wrapper
